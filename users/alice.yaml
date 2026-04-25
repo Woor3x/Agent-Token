@@ -1,0 +1,15 @@
+user_id: alice
+password: "alice123"
+permissions:
+  - action: feishu.bitable.read
+    resource_pattern: "app_token:*/table:*"
+  - action: feishu.doc.write
+    resource_pattern: "doc_token:*"
+  - action: web.search
+    resource_pattern: "*"
+  - action: web.fetch
+    resource_pattern: "https://*"
+  - action: feishu.contact.read
+    resource_pattern: "department:*"
+  - action: feishu.calendar.read
+    resource_pattern: "calendar:*"

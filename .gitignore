@@ -1,0 +1,70 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+wheels/
+
+# ── Virtual environments ───────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.local
+.env.*.local
+
+# ── Test & coverage ────────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+nosetests.xml
+test-results/
+
+# ── KMS keys (加密私钥，不提交到版本库) ────────────────────────────────────────
+idp/kms/keys/
+# 如需提交 keys 目录结构，保留 .gitkeep
+!idp/kms/keys/.gitkeep
+
+# ── SQLite 数据库 ──────────────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Docker volumes / 运行时数据 ────────────────────────────────────────────────
+idp_data/
+idp_kms/
+
+# ── IDE ────────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── 日志 ───────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── mypy / ruff / pre-commit ───────────────────────────────────────────────────
+.mypy_cache/
+.ruff_cache/
+.pre-commit-config-local.yaml

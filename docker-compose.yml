@@ -1,0 +1,64 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7.2-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  opa:
+    image: openpolicyagent/opa:0.63.0
+    command: run --server --log-level info /policies
+    volumes:
+      - ./opa/policies:/policies:ro
+      - ./opa/data:/data:ro
+    ports:
+      - "8181:8181"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8181/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  idp:
+    build:
+      context: ./idp
+      dockerfile: Dockerfile
+    environment:
+      - IDP_ISSUER=https://idp.local
+      - IDP_KMS_PASSPHRASE=dev-passphrase-change-in-prod
+      - REDIS_URL=redis://redis:6379
+      - SQLITE_PATH=/data/idp.db
+      - OPA_URL=http://opa:8181
+      - ADMIN_TOKEN=admin-secret-token
+      - POLICY_VERSION=v1.2.0
+      - CAPABILITIES_DIR=/app/capabilities
+      - USERS_DIR=/app/users
+      - ALLOWED_REDIRECT_URIS=http://localhost:3000/callback,https://web-ui.local/callback
+      - ALLOWED_SOURCE_NETS=0.0.0.0/0
+    volumes:
+      - ./capabilities:/app/capabilities:ro
+      - ./users:/app/users:ro
+      - idp_data:/data
+      - idp_kms:/app/kms/keys
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  idp_data:
+  idp_kms:

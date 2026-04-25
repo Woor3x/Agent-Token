@@ -1,0 +1,18 @@
+agent_id: doc_assistant
+display_name: 文档助手 Agent
+role: orchestrator
+capabilities:
+  - action: feishu.doc.write
+    resource_pattern: "doc_token:*"
+    constraints:
+      max_calls_per_minute: 30
+  - action: a2a.invoke
+    resource_pattern: "agent:data_agent"
+  - action: a2a.invoke
+    resource_pattern: "agent:web_agent"
+delegation:
+  accept_from:
+    - user
+  max_depth: 1
+underlying_credentials:
+  - feishu_user_token
