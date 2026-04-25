@@ -27,7 +27,13 @@ ENV/
 .env.local
 .env.*.local
 
-# ── Test & coverage ────────────────────────────────────────────────────────────
+# ── 测试文件（本地保留，不上传 GitHub）────────────────────────────────────────
+services/idp/tests/
+services/idp/pytest.ini
+services/idp/requirements-test.txt
+services/opa/policies/a2a_test.rego
+tests/
+scripts/
 .pytest_cache/
 .coverage
 .coverage.*
@@ -37,10 +43,9 @@ htmlcov/
 nosetests.xml
 test-results/
 
-# ── KMS keys (加密私钥，不提交到版本库) ────────────────────────────────────────
-idp/kms/keys/
-# 如需提交 keys 目录结构，保留 .gitkeep
-!idp/kms/keys/.gitkeep
+# ── KMS 私钥（加密密钥，绝不提交）────────────────────────────────────────────
+services/idp/kms/keys/
+!services/idp/kms/keys/.gitkeep
 
 # ── SQLite 数据库 ──────────────────────────────────────────────────────────────
 *.db
@@ -50,6 +55,10 @@ idp/kms/keys/
 # ── Docker volumes / 运行时数据 ────────────────────────────────────────────────
 idp_data/
 idp_kms/
+
+# ── OPA 撤销数据（运行时动态写入，初始版本由 revoked.json 提供）──────────────
+# services/opa/data/revoked.json 保持提交（初始空集合），
+# 运行时写入通过 bundle/API 管理，不在此排除
 
 # ── IDE ────────────────────────────────────────────────────────────────────────
 .vscode/

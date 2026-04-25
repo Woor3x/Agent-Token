@@ -13,10 +13,10 @@ services:
 
   opa:
     image: openpolicyagent/opa:0.63.0
-    command: run --server --log-level info /policies
+    command: run --server --log-level info /policies /data
     volumes:
-      - ./opa/policies:/policies:ro
-      - ./opa/data:/data:ro
+      - ./services/opa/policies:/policies:ro
+      - ./services/opa/data:/data:ro
     ports:
       - "8181:8181"
     healthcheck:
@@ -27,7 +27,7 @@ services:
 
   idp:
     build:
-      context: ./idp
+      context: ./services/idp
       dockerfile: Dockerfile
     environment:
       - IDP_ISSUER=https://idp.local
