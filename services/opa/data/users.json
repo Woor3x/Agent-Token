@@ -1,0 +1,20 @@
+{
+  "users": {
+    "alice": {
+      "permissions": [
+        { "action": "feishu.bitable.read",  "resource_pattern": "app_token:*/table:*" },
+        { "action": "feishu.contact.read",  "resource_pattern": "contact:*" },
+        { "action": "feishu.calendar.read", "resource_pattern": "calendar:*" },
+        { "action": "feishu.doc.write",     "resource_pattern": "doc_token:*" },
+        { "action": "web.search",           "resource_pattern": "*" },
+        { "action": "web.fetch",            "resource_pattern": "https://*" }
+      ]
+    },
+    "bob": {
+      "permissions": [
+        { "action": "feishu.bitable.read",  "resource_pattern": "app_token:*/table:bob_*" },
+        { "action": "feishu.contact.read",  "resource_pattern": "contact:*" }
+      ]
+    }
+  }
+}

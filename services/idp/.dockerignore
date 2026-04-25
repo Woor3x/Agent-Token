@@ -1,0 +1,30 @@
+# 不打包进 Docker 镜像的文件
+
+# 测试相关
+tests/
+pytest.ini
+requirements-test.txt
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 运行时产生的文件
+kms/keys/
+*.db
+*.log
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# 环境变量
+.env
+.env.*
