@@ -77,3 +77,4 @@ logs/
 .mypy_cache/
 .ruff_cache/
 .pre-commit-config-local.yaml
+/.claude/
