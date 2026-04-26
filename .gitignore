@@ -111,5 +111,5 @@ keys/
 # Local override of compose
 docker-compose.override.yml
 
-# Empty stub left by Windows file-lock that WSL can't rm
-分模块方案/
+tests/
+docs/
