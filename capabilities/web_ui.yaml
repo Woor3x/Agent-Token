@@ -1,0 +1,11 @@
+agent_id: web_ui
+display_name: Web UI orchestrator (entry hop for human users)
+role: orchestrator
+capabilities:
+  - action: a2a.invoke
+    resource_pattern: "agent:doc_assistant"
+delegation:
+  accept_from:
+    - user
+  max_depth: 1
+underlying_credentials: []

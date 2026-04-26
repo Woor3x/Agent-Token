@@ -1,0 +1,225 @@
+## Agent-Token full integration stack — M1 (IdP + OPA + Redis) + M4/M5 agents + sdk.
+##
+## Bring up:
+##     docker compose up --build
+##
+## Smoke:
+##     curl http://localhost:6379  (redis)
+##     curl http://localhost:8181/health
+##     curl http://localhost:8000/healthz
+##     curl http://localhost:9000/healthz
+##     curl http://localhost:9200/healthz
+##     curl http://localhost:8100/healthz
+
+x-agent-env: &agent-env
+  IDP_ISSUER: https://idp.local
+  IDP_URL: http://idp:8000
+  IDP_JWKS_URL: http://idp:8000/jwks
+  IDP_TOKEN_EXCHANGE_URL: http://idp:8000/token/exchange
+  ADMIN_TOKEN: admin-secret-token
+  GATEWAY_URL: http://gateway:9200
+  FEISHU_BASE: http://feishu-mock:9000
+  FEISHU_MOCK: "true"
+  MOCK_AUTH: "false"
+  VERIFY_DPOP: "false"
+  POLICY_VERSION: v1.2.0
+  LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+  ARK_API_KEY: ${ARK_API_KEY:-}
+  ARK_MODEL: ${ARK_MODEL:-}
+  ARK_BASE: ${ARK_BASE:-https://ark.cn-beijing.volces.com/api/v3}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  OPENAI_MODEL: ${OPENAI_MODEL:-}
+  OPENAI_BASE: ${OPENAI_BASE:-}
+
+services:
+
+  # ---- M1 infrastructure ----------------------------------------------------
+
+  redis:
+    image: redis:7.2-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  opa:
+    image: openpolicyagent/opa:0.63.0
+    command: run --server --log-level info /policies /data
+    volumes:
+      - ./services/opa/policies:/policies:ro
+      - ./services/opa/data:/data:ro
+    ports: ["8181:8181"]
+    # OPA image is distroless — no wget/curl. Use opa CLI itself.
+    healthcheck:
+      test: ["CMD", "/opa", "eval", "-f", "raw", "1+1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  idp:
+    build:
+      context: ./services/idp
+      dockerfile: Dockerfile
+    environment:
+      IDP_ISSUER: https://idp.local
+      IDP_KMS_PASSPHRASE: dev-passphrase-change-in-prod
+      REDIS_URL: redis://redis:6379
+      SQLITE_PATH: /data/idp.db
+      OPA_URL: http://opa:8181
+      ADMIN_TOKEN: admin-secret-token
+      POLICY_VERSION: v1.2.0
+      CAPABILITIES_DIR: /data/capabilities
+      USERS_DIR: /data/users
+      ALLOWED_REDIRECT_URIS: http://localhost:3000/callback,https://web-ui.local/callback
+      ALLOWED_SOURCE_NETS: 0.0.0.0/0
+    volumes:
+      # Mount under /data to avoid shadowing IdP's own ``capabilities``/``users`` Python packages at /app.
+      - ./capabilities:/data/capabilities:ro
+      - ./users:/data/users:ro
+      - idp_data:/data
+      - idp_kms:/app/kms/keys
+    ports: ["8000:8000"]
+    depends_on:
+      redis:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  # ---- M5 mocks -------------------------------------------------------------
+
+  feishu-mock:
+    build: .
+    image: agent-token/agent-base
+    environment:
+      <<: *agent-env
+      APP_MODULE: services.feishu_mock.main:app
+      PORT: "9000"
+    ports: ["9000:9000"]
+
+  # ---- M2 real gateway (replaces M5 gateway-mock) ---------------------------
+  #
+  # Settings keyed via ``GW_*`` env (pydantic env_prefix). Internal+external
+  # port pinned to 9200 so DPoP htu (signed by SDK against GATEWAY_URL) and
+  # gateway's ``request.url`` match host and port exactly.
+  gateway:
+    build:
+      context: ./services/gateway
+      dockerfile: Dockerfile
+    environment:
+      GW_HOST: 0.0.0.0
+      GW_PORT: "9200"
+      GW_LOG_LEVEL: info
+      GW_IDP_ISSUER: https://idp.local
+      GW_IDP_JWKS_URL: http://idp:8000/jwks
+      GW_OPA_URL: http://opa:8181/v1/data/agent/authz
+      GW_OPA_TIMEOUT_MS: "200"
+      GW_REDIS_URL: redis://redis:6379/0
+      GW_DELEGATION_MAX_DEPTH: "4"
+      GW_DPOP_MAX_IAT_SKEW: "60"
+      GW_DPOP_JTI_TTL: "120"
+      GW_RATE_LIMIT_CAPACITY: "100"
+      GW_RATE_LIMIT_REFILL_RATE: "10"
+      GW_MTLS_ENABLED: "false"
+      GW_AUDIT_DB_PATH: /data/gateway-audit.db
+      GW_ADMIN_TOKEN: admin-secret-token
+      GW_ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GW_NL_MODEL: claude-haiku-4-5-20251001
+      GW_REGISTRY_PATH: /app/registry.yaml
+      GW_POLICY_VERSION: v1.2.0
+    volumes:
+      - gateway_data:/data
+    ports: ["9200:9200"]
+    depends_on:
+      idp:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+      doc-assistant:
+        condition: service_started
+      data-agent:
+        condition: service_started
+      web-agent:
+        condition: service_started
+
+  # ---- M4 agents ------------------------------------------------------------
+  #
+  # Each agent boots via scripts/agent_entrypoint.sh which:
+  #   1. waits for IdP healthy
+  #   2. registers with /agents/register if no key yet (saves to /app/keys/)
+  #   3. execs uvicorn
+
+  doc-assistant:
+    build: .
+    image: agent-token/agent-base
+    entrypoint: ["/app/scripts/agent_entrypoint.sh"]
+    environment:
+      <<: *agent-env
+      AGENT_ID: doc_assistant
+      AGENT_ROLE: orchestrator
+      APP_MODULE: agents.doc_assistant.main:app
+      PORT: "8100"
+    volumes:
+      - doc_assistant_keys:/app/keys
+    ports: ["8100:8100"]
+    depends_on:
+      idp:
+        condition: service_healthy
+      feishu-mock:
+        condition: service_started
+
+  data-agent:
+    build: .
+    image: agent-token/agent-base
+    entrypoint: ["/app/scripts/agent_entrypoint.sh"]
+    environment:
+      <<: *agent-env
+      AGENT_ID: data_agent
+      AGENT_ROLE: executor
+      APP_MODULE: agents.data_agent.main:app
+      PORT: "8101"
+    volumes:
+      - data_agent_keys:/app/keys
+    ports: ["8101:8101"]
+    depends_on:
+      idp:
+        condition: service_healthy
+      feishu-mock:
+        condition: service_started
+
+  web-agent:
+    build: .
+    image: agent-token/agent-base
+    entrypoint: ["/app/scripts/agent_entrypoint.sh"]
+    environment:
+      <<: *agent-env
+      AGENT_ID: web_agent
+      AGENT_ROLE: executor
+      APP_MODULE: agents.web_agent.main:app
+      PORT: "8102"
+    volumes:
+      - web_agent_keys:/app/keys
+    ports: ["8102:8102"]
+    depends_on:
+      idp:
+        condition: service_healthy
+
+volumes:
+  idp_data:
+  idp_kms:
+  gateway_data:
+  doc_assistant_keys:
+  data_agent_keys:
+  web_agent_keys:
+
+networks:
+  default:
+    name: agent-token-net

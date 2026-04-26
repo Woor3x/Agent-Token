@@ -1,0 +1,27 @@
+# Agent registry — used by gateway routing layer.
+# Internal compose service URLs; mTLS off for dev.
+agents:
+  doc_assistant:
+    upstream: http://doc-assistant:8100
+    transport: http
+    timeout_ms: 30000
+    retry:
+      max: 0          # write-side: no retry
+    mtls: {}
+
+  data_agent:
+    upstream: http://data-agent:8101
+    transport: http
+    timeout_ms: 10000
+    retry:
+      max: 2
+      backoff_ms: 200
+    mtls: {}
+
+  web_agent:
+    upstream: http://web-agent:8102
+    transport: http
+    timeout_ms: 15000
+    retry:
+      max: 1
+    mtls: {}

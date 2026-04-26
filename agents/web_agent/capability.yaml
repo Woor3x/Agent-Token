@@ -1,0 +1,17 @@
+agent_id: web_agent
+display_name: Web 搜索 Agent
+role: executor
+capabilities:
+  - action: web.search
+    resource_pattern: "*"
+    constraints:
+      max_calls_per_minute: 30
+  - action: web.fetch
+    resource_pattern: "https://*"
+    constraints:
+      max_calls_per_minute: 30
+delegation:
+  accept_from:
+    - doc_assistant
+  max_depth: 3
+underlying_credentials: []

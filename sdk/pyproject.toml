@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-token-sdk"
+version = "1.0.0"
+description = "Zero-trust Agent Token SDK (RFC 7523 Client Assertion + RFC 8693 Token Exchange + RFC 9449 DPoP)"
+requires-python = ">=3.10"
+dependencies = [
+    "httpx>=0.27",
+    "pyjwt[crypto]>=2.9",
+    "cryptography>=42",
+    "cachetools>=5",
+    "fastapi>=0.110",
+]
+
+[project.optional-dependencies]
+langgraph = ["langgraph"]
+langchain = ["langchain-core"]
+autogen = ["pyautogen"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["agent_token_sdk*"]
