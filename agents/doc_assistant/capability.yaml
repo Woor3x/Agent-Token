@@ -1,0 +1,22 @@
+agent_id: doc_assistant
+role: orchestrator
+public_key_jwk:
+  kty: RSA
+  kid: "doc_assistant-2025-q1"
+  n: "mock-n"
+  e: "AQAB"
+
+capabilities:
+  - action: feishu.doc.write
+    resource_pattern: "doc_token:*"
+  - action: a2a.invoke
+    resource_pattern: "agent:data_agent|agent:web_agent"
+  - action: orchestrate
+    resource_pattern: "plan:*"
+
+delegation:
+  accept_from: [user]
+  max_depth: 1
+
+underlying_credentials:
+  - feishu_tenant_access_token_write

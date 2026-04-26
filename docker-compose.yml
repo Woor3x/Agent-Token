@@ -1,0 +1,109 @@
+## Agent-Token full demo stack.
+##
+## Six services on a single user-defined bridge so they can resolve each
+## other by container name (``feishu-mock``, ``idp-mock``, etc.).
+##
+## Bring up with:
+##     docker compose up --build
+##
+## Smoke test:
+##     curl http://localhost:9100/healthz
+##     curl http://localhost:9200/healthz
+##     curl http://localhost:8100/healthz
+
+x-common-env: &common-env
+  IDP_ISSUER: https://idp.local
+  IDP_JWKS_URL: http://idp-mock:9100/jwks
+  MOCK_AUTH_SECRET: mock-secret
+  GATEWAY_URL: http://gateway-mock:9200
+  FEISHU_BASE: http://feishu-mock:9000
+  FEISHU_MOCK: "true"
+  VERIFY_DPOP: "false"
+  LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+  ARK_API_KEY: ${ARK_API_KEY:-}
+  ARK_MODEL: ${ARK_MODEL:-}
+  ARK_BASE: ${ARK_BASE:-https://ark.cn-beijing.volces.com/api/v3}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  OPENAI_MODEL: ${OPENAI_MODEL:-}
+  OPENAI_BASE: ${OPENAI_BASE:-}
+
+services:
+
+  feishu-mock:
+    build: .
+    image: agent-token/base
+    environment:
+      <<: *common-env
+      APP_MODULE: services.feishu_mock.main:app
+      PORT: "9000"
+    ports:
+      - "9000:9000"
+
+  idp-mock:
+    build: .
+    image: agent-token/base
+    environment:
+      <<: *common-env
+      APP_MODULE: services.idp_mock.main:app
+      PORT: "9100"
+    ports:
+      - "9100:9100"
+
+  gateway-mock:
+    build: .
+    image: agent-token/base
+    environment:
+      <<: *common-env
+      APP_MODULE: services.gateway_mock.main:app
+      PORT: "9200"
+      AGENT_DOC_ASSISTANT_URL: http://doc-assistant:8100
+      AGENT_DATA_AGENT_URL:    http://data-agent:8101
+      AGENT_WEB_AGENT_URL:     http://web-agent:8102
+    ports:
+      - "9200:9200"
+    depends_on:
+      - doc-assistant
+      - data-agent
+      - web-agent
+
+  doc-assistant:
+    build: .
+    image: agent-token/base
+    environment:
+      <<: *common-env
+      APP_MODULE: agents.doc_assistant.main:app
+      PORT: "8100"
+    ports:
+      - "8100:8100"
+    depends_on:
+      - feishu-mock
+      - idp-mock
+
+  data-agent:
+    build: .
+    image: agent-token/base
+    environment:
+      <<: *common-env
+      APP_MODULE: agents.data_agent.main:app
+      PORT: "8101"
+    ports:
+      - "8101:8101"
+    depends_on:
+      - feishu-mock
+      - idp-mock
+
+  web-agent:
+    build: .
+    image: agent-token/base
+    environment:
+      <<: *common-env
+      APP_MODULE: agents.web_agent.main:app
+      PORT: "8102"
+    ports:
+      - "8102:8102"
+    depends_on:
+      - idp-mock
+
+networks:
+  default:
+    name: agent-token-net

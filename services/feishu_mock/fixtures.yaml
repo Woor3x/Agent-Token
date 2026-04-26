@@ -1,0 +1,71 @@
+# Feishu Mock fixtures (see 方案-Agents.md §9.2)
+tenant_access_token:
+  token: "t-mock-tenant-access-token"
+  expire: 7200
+
+bitable:
+  bascn_alice:
+    tbl_q1:
+      records:
+        - record_id: "rec001"
+          fields:
+            region: "North"
+            sales: 120000
+            quarter: "Q1"
+        - record_id: "rec002"
+          fields:
+            region: "South"
+            sales: 98000
+            quarter: "Q1"
+        - record_id: "rec003"
+          fields:
+            region: "East"
+            sales: 156000
+            quarter: "Q1"
+        - record_id: "rec004"
+          fields:
+            region: "West"
+            sales: 87000
+            quarter: "Q1"
+    tbl_q2:
+      records:
+        - record_id: "rec101"
+          fields:
+            region: "North"
+            sales: 135000
+            quarter: "Q2"
+        - record_id: "rec102"
+          fields:
+            region: "South"
+            sales: 112000
+            quarter: "Q2"
+
+contact:
+  sales:
+    users:
+      - user_id: "u_alice"
+        name: "Alice"
+        email: "alice@acme.com"
+        department: "sales"
+      - user_id: "u_bob"
+        name: "Bob"
+        email: "bob@acme.com"
+        department: "sales"
+  engineering:
+    users:
+      - user_id: "u_carol"
+        name: "Carol"
+        email: "carol@acme.com"
+        department: "engineering"
+
+calendar:
+  cal_team:
+    events:
+      - event_id: "evt001"
+        summary: "Q1 review"
+        start_time: "2026-04-01T09:00:00Z"
+        end_time: "2026-04-01T10:00:00Z"
+      - event_id: "evt002"
+        summary: "Sales sync"
+        start_time: "2026-04-15T14:00:00Z"
+        end_time: "2026-04-15T15:00:00Z"

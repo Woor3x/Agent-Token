@@ -1,0 +1,25 @@
+agent_id: web_agent
+role: executor
+public_key_jwk:
+  kty: RSA
+  kid: "web_agent-2025-q1"
+  n: "mock-n"
+  e: "AQAB"
+
+capabilities:
+  - action: web.search
+    resource_pattern: "*"
+    constraints:
+      max_results: 10
+  - action: web.fetch
+    resource_pattern: "https://*"
+    constraints:
+      max_size_kb: 512
+      timeout_ms: 5000
+
+delegation:
+  accept_from: [doc_assistant]
+  max_depth: 2
+
+underlying_credentials:
+  - search_api_key

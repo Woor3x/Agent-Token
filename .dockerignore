@@ -1,0 +1,14 @@
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.git
+.gitignore
+.venv
+venv
+tests
+docs
+*.md
+*.zip
+分模块方案
+方案.png

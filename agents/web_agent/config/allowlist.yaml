@@ -1,0 +1,16 @@
+# 方案-Agents §6.3
+allowed_domains:
+  - "*.wikipedia.org"
+  - "arxiv.org"
+  - "github.com"
+  - "docs.feishu.cn"
+  - "example.com"
+  - "*.example.com"
+blocked_cidrs:
+  - "10.0.0.0/8"
+  - "172.16.0.0/12"
+  - "192.168.0.0/16"
+  - "127.0.0.0/8"
+  - "169.254.0.0/16"
+  - "::1/128"
+  - "fc00::/7"

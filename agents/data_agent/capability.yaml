@@ -1,0 +1,25 @@
+agent_id: data_agent
+role: executor
+public_key_jwk:
+  kty: RSA
+  kid: "data_agent-2025-q1"
+  n: "mock-n"
+  e: "AQAB"
+
+capabilities:
+  - action: feishu.bitable.read
+    resource_pattern: "app_token:*/table:*"
+    constraints:
+      max_rows_per_call: 1000
+      max_calls_per_minute: 60
+  - action: feishu.contact.read
+    resource_pattern: "department:*"
+  - action: feishu.calendar.read
+    resource_pattern: "calendar:*"
+
+delegation:
+  accept_from: [doc_assistant]
+  max_depth: 3
+
+underlying_credentials:
+  - feishu_tenant_access_token_read
