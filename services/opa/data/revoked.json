@@ -1,0 +1,10 @@
+{
+  "revoked": {
+    "jtis":   {},
+    "subs":   {},
+    "agents": {},
+    "traces": {},
+    "plans":  {},
+    "chains": {}
+  }
+}

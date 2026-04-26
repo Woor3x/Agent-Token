@@ -1,0 +1,34 @@
+agents:
+  doc_assistant:
+    upstream: https://doc-assistant.local:8001
+    transport: http
+    timeout_ms: 30000
+    retry:
+      max: 0        # write operations: no retry
+    mtls:
+      cert: /certs/gw.crt
+      key:  /certs/gw.key
+      ca:   /certs/ca.crt
+
+  data_agent:
+    upstream: https://data-agent.local:8002
+    transport: http
+    timeout_ms: 10000
+    retry:
+      max: 2
+      backoff_ms: 200
+    mtls:
+      cert: /certs/gw.crt
+      key:  /certs/gw.key
+      ca:   /certs/ca.crt
+
+  web_agent:
+    upstream: https://web-agent.local:8003
+    transport: http
+    timeout_ms: 15000
+    retry:
+      max: 1
+    mtls:
+      cert: /certs/gw.crt
+      key:  /certs/gw.key
+      ca:   /certs/ca.crt

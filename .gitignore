@@ -1,0 +1,82 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+wheels/
+
+# ── Virtual environments ───────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.local
+.env.*.local
+
+# ── 测试文件（本地保留，不上传 GitHub）────────────────────────────────────────
+pytest.ini
+services/idp/tests/
+services/idp/pytest.ini
+services/idp/requirements-test.txt
+services/opa/policies/a2a_test.rego
+tests/
+scripts/
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+nosetests.xml
+test-results/
+
+# ── KMS 私钥（加密密钥，绝不提交）────────────────────────────────────────────
+services/idp/kms/keys/
+!services/idp/kms/keys/.gitkeep
+
+# ── SQLite 数据库 ──────────────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Docker volumes / 运行时数据 ────────────────────────────────────────────────
+idp_data/
+idp_kms/
+
+# ── OPA 撤销数据（运行时动态写入，初始版本由 revoked.json 提供）──────────────
+# services/opa/data/revoked.json 保持提交（初始空集合），
+# 运行时写入通过 bundle/API 管理，不在此排除
+
+# ── IDE ────────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── 日志 ───────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── mypy / ruff / pre-commit ───────────────────────────────────────────────────
+.mypy_cache/
+.ruff_cache/
+.pre-commit-config-local.yaml
+/.claude/
+

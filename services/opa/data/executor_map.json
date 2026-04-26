@@ -1,0 +1,10 @@
+{
+  "executor_map": {
+    "feishu.bitable.read":   "data_agent",
+    "feishu.contact.read":   "data_agent",
+    "feishu.calendar.read":  "data_agent",
+    "feishu.doc.write":      "doc_assistant",
+    "web.search":            "web_agent",
+    "web.fetch":             "web_agent"
+  }
+}
