@@ -37,8 +37,9 @@ one_time_declared if {
 # token.aud 必须等于 "agent:{target_agent}"
 # ─────────────────────────────────────────────────────────────────────────────
 audience_match if {
-    # M1 IdP signs aud as bare agent_id (no "agent:" prefix).
-    input.token.aud == input.target_agent
+    # Fix B: IdP now signs aud as "agent:<id>"; match that prefix form.
+    expected := sprintf("agent:%s", [input.target_agent])
+    input.token.aud == expected
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -64,10 +65,21 @@ executor_valid if {
 }
 
 executor_valid if {
-    # ``a2a.invoke``: target encoded in resource (``agent:<id>``).
+    # Fix C: a2a.invoke with "agent:<id>" format.
+    # Guard: trim_prefix returns the original string if prefix absent,
+    # so check that the result doesn't still start with "/" (agent:// leak).
     input.intent.action == "a2a.invoke"
-    expected := trim_prefix(input.intent.resource, "agent:")
-    expected == input.target_agent
+    target := trim_prefix(input.intent.resource, "agent:")
+    not startswith(target, "/")
+    target == input.target_agent
+}
+
+executor_valid if {
+    # Fix C: a2a.invoke with URI-authority format "agent://<id>".
+    input.intent.action == "a2a.invoke"
+    target := trim_prefix(input.intent.resource, "agent://")
+    not startswith(target, "/")   # guard against "agent:///..." edge case
+    target == input.target_agent
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
