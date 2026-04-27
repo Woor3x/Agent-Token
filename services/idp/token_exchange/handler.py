@@ -3,6 +3,29 @@ from typing import Optional
 
 from fastapi import APIRouter, Form, Header, Request
 
+
+def _canonical_exchange_url(request: Request) -> str:
+    """Reconstruct /token/exchange URL honouring X-Forwarded-* headers.
+
+    When the IdP sits behind a reverse proxy (nginx / Envoy / ALB), the proxy
+    rewrites the Host and scheme before the request reaches uvicorn.
+    The DPoP proof is signed against the *external* URL that the client sees,
+    so we must reconstruct that URL instead of using ``request.base_url`` which
+    reflects only the internal bind address.
+    """
+    proto = (
+        request.headers.get("X-Forwarded-Proto")
+        or request.url.scheme
+    )
+    host = (
+        request.headers.get("X-Forwarded-Host")
+        or request.headers.get("Host")
+        or request.url.netloc
+    )
+    # Strip-path prefix set by the proxy (e.g. /idp when mounted at /idp/*)
+    prefix = request.headers.get("X-Forwarded-Prefix", "").rstrip("/")
+    return f"{proto}://{host}{prefix}/token/exchange"
+
 from agents.loader import get_agent_capability
 from audit.writer import get_audit_writer
 from config import settings
@@ -49,7 +72,6 @@ async def token_exchange(
         raise InvalidRequest(f"Unsupported grant_type: {grant_type}")
 
     client_ip = request.client.host if request.client else "unknown"
-    base_url = str(request.base_url).rstrip("/")
 
     # Phase 1: Verify client assertion (orchestrator identity)
     orchestrator = await verify_client_assertion(client_assertion)
@@ -63,7 +85,7 @@ async def token_exchange(
         dpop_claims = await verify_dpop_proof(
             dpop,
             expected_htm="POST",
-            expected_htu=f"{base_url}/token/exchange",
+            expected_htu=_canonical_exchange_url(request),  # Fix A: honours X-Forwarded-* headers
         )
         dpop_jkt = dpop_claims.jkt
 
@@ -119,7 +141,9 @@ async def token_exchange(
     token_claims = {
         "sub": user.sub,
         "act": {"sub": orchestrator.agent_id},
-        "aud": target_agent_id,
+        # Fix B: use "agent:<id>" prefix per spec (§3 audience binding).
+        # OPA audience_match rule checks token.aud == "agent:{target_agent}".
+        "aud": f"agent:{target_agent_id}",
         "scope": " ".join(effective_scope),
         "plan_id": plan_id,
         "task_id": task_id,
@@ -143,7 +167,7 @@ async def token_exchange(
         "task_id": task_id,
         "sub": user.sub,
         "act": orchestrator.agent_id,
-        "aud": target_agent_id,
+        "aud": f"agent:{target_agent_id}",   # consistent with token.aud
         "decision": "allow",
         "payload": {
             "token_jti": token_jti,

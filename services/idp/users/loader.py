@@ -32,7 +32,9 @@ async def load_users(users_dir: str) -> None:
         user = UserRecord.model_validate(data)
         password_hash: Optional[str] = None
         if user.password:
-            password_hash = bcrypt.hash(user.password)
+            # bcrypt 只处理前 72 字节；超出部分静默截断符合规范，
+            # 同时避免 passlib 部分版本因 truncate_error=True 抛 ValueError。
+            password_hash = bcrypt.hash(user.password[:72])
 
         permissions = [p.model_dump() for p in user.permissions]
         now = datetime.now(timezone.utc).isoformat()
