@@ -8,9 +8,8 @@ from fastapi.responses import JSONResponse
 
 from config import settings
 from errors import authn_invalid, authn_revoked, authn_dpop_invalid, GatewayError
-from revoke.bloom import revoke_bloom
-from token.dpop import verify_dpop
-from token.jwks_cache import jwks_cache
+from jwt_token.dpop import verify_dpop
+from jwt_token.jwks_cache import jwks_cache
 
 logger = logging.getLogger(__name__)
 
@@ -57,22 +56,29 @@ async def authn_middleware(request: Request, call_next):
         if not claims.get("one_time"):
             raise authn_invalid("not a one-time token")
 
-        # 4-dim revocation
+        # 4 维撤销查询，全部直接查 Redis，不经过 Bloom 过滤器
         redis: aioredis.Redis = request.app.state.redis
         jti = claims["jti"]
         sub = claims.get("sub", "")
         trace_id = claims.get("trace_id", "")
         plan_id = claims.get("plan_id", "")
 
-        if revoke_bloom.might_contain(jti):
+        try:
             if await redis.sismember("revoked:jtis", jti):
                 raise authn_revoked("jti")
-        if sub and await redis.sismember("revoked:subs", sub):
-            raise authn_revoked("sub")
-        if trace_id and await redis.sismember("revoked:traces", trace_id):
-            raise authn_revoked("trace")
-        if plan_id and await redis.sismember("revoked:plans", plan_id):
-            raise authn_revoked("plan")
+            if sub and await redis.sismember("revoked:subs", sub):
+                raise authn_revoked("sub")
+            if trace_id and await redis.sismember("revoked:traces", trace_id):
+                raise authn_revoked("trace")
+            if plan_id and await redis.sismember("revoked:plans", plan_id):
+                raise authn_revoked("plan")
+        except GatewayError:
+            raise
+        except Exception as exc:
+            logger.error("redis unavailable during revocation check: %s", exc)
+            err = GatewayError("SERVER_ERROR", "redis unavailable")
+            err.http_status = 503
+            raise err
 
         # DPoP proof
         dpop_token = request.headers.get("DPoP", "")

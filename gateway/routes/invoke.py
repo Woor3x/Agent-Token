@@ -13,11 +13,12 @@ from errors import AuthzError, GatewayError, _error_body
 from intent.parser_structured import parse_structured
 from middleware.audit import audit_writer
 from routing.registry import registry
-from routing.upstream_client import call_upstream
+from routing.upstream_client import ForwardContext, call_upstream
 
 router = APIRouter()
 
 
+# 意图入口, 直接和 Agent 交互的端点
 @router.post("/a2a/invoke")
 async def invoke(request: Request):
     start_ms = time.monotonic() * 1000
@@ -61,11 +62,26 @@ async def invoke(request: Request):
 
     # Route upstream
     cfg = registry.get(target_agent)
-    extra_headers = {
+    forward_headers = dict(request.headers)
+    forward_headers.update({
         "X-Policy-Version": settings.policy_version,
         "X-Audit-Id": f"evt_{uuid.uuid4().hex[:12]}",
-    }
-    response = await call_upstream(request, target_agent, cfg, body_bytes, extra_headers)
+    })
+    baggage_parts = [getattr(request.state, "baggage", f"trace_id={trace_id}")]
+    if plan_id:
+        baggage_parts.append(f"plan_id={plan_id}")
+    if claims.get("sub"):
+        baggage_parts.append(f"sub={claims['sub']}")
+
+    ctx = ForwardContext(
+        method=request.method,
+        path=request.url.path,
+        headers=forward_headers,
+        trace_id=trace_id,
+        span_id=getattr(request.state, "span_id", ""),
+        baggage=",".join(baggage_parts),
+    )
+    response = await call_upstream(target_agent, cfg, body_bytes, ctx)
 
     duration = time.monotonic() * 1000 - start_ms
     _emit_audit(request, claims, intent, target_agent, "allow", [], start_ms, duration)

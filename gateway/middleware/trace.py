@@ -30,14 +30,8 @@ async def trace_middleware(request: Request, call_next):
     span_id = _generate_span_id()
     traceparent = f"00-{trace_id}-{span_id}-01"
 
-    # baggage: carry plan_id and sub for downstream correlation
-    claims = getattr(request.state, "token_claims", {}) or {}
-    baggage_parts = [f"trace_id={trace_id}"]
-    if claims.get("plan_id"):
-        baggage_parts.append(f"plan_id={claims['plan_id']}")
-    if claims.get("sub"):
-        baggage_parts.append(f"sub={claims['sub']}")
-    baggage = ",".join(baggage_parts)
+    # baggage 只携带 trace_id，业务字段（plan_id/sub）在路由层构造 ForwardContext 时补充
+    baggage = f"trace_id={trace_id}"
 
     request.state.trace_id = trace_id
     request.state.span_id = span_id

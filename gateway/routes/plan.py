@@ -8,7 +8,6 @@ import time
 import uuid
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -16,7 +15,7 @@ from config import settings
 from errors import UpstreamError, _error_body
 from middleware.audit import audit_writer
 from routing.registry import registry
-from routing.upstream_client import call_upstream
+from routing.upstream_client import ForwardContext, call_upstream
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -141,19 +140,17 @@ async def _run_task(
 
     agent_id = task.get("agent_id", "")
     cfg = registry.get(agent_id)
-    upstream_url = f"{cfg.upstream.rstrip('/')}/a2a/task"
-
     payload = json.dumps({"task_id": tid, "plan_id": plan_id, **task}).encode()
-    timeout = cfg.timeout_ms / 1000
 
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        r = await client.post(
-            upstream_url,
-            content=payload,
-            headers={
-                "Content-Type": "application/json",
-                "traceparent": f"00-{trace_id}-{uuid.uuid4().hex[:16]}-01",
-            },
-        )
-        r.raise_for_status()
-        return r.json().get("result_ref", tid)
+    ctx = ForwardContext(
+        method="POST",
+        path="/a2a/task",
+        headers={"Content-Type": "application/json"},
+        trace_id=trace_id,
+        span_id=uuid.uuid4().hex[:16],
+    )
+    response = await call_upstream(agent_id, cfg, payload, ctx)
+
+    if response.status_code >= 400:
+        raise UpstreamError("UPSTREAM_FAIL", f"upstream returned {response.status_code}")
+    return json.loads(response.body).get("result_ref", tid)

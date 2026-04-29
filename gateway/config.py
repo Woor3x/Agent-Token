@@ -1,70 +1,182 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+"""
+Gateway 全局配置。
+
+所有配置项均可通过环境变量覆盖，前缀为 GW_。
+示例：export GW_REDIS_URL=redis://10.0.0.1:6379/0
+"""
+
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="GW_", env_file=".env", extra="ignore")
+    # -------------------------------------------------------------------------
+    # 服务器
+    # -------------------------------------------------------------------------
 
-    # Service
     host: str = "0.0.0.0"
+    # 监听地址。
+
     port: int = 8080
+    # 监听端口。
+
     log_level: str = "info"
+    # 日志级别：debug / info / warning / error。
 
-    # IdP
-    idp_jwks_url: str = "https://idp.local:8443/jwks"
-    idp_issuer: str = "https://idp.local"
-    jwks_cache_ttl: int = 600          # seconds
-
-    # OPA
-    opa_url: str = "http://opa.local:8181/v1/data/agent/authz"
-    opa_timeout_ms: int = 5
-
-    # Redis
-    redis_url: str = "redis://redis.local:6379/0"
-    redis_password: str = ""
-
-    # Delegation
-    delegation_max_depth: int = 4
-
-    # DPoP
-    dpop_max_iat_skew: int = 60        # seconds
-    dpop_jti_ttl: int = 120            # seconds
-
-    # Rate limit (token bucket defaults)
-    rate_limit_capacity: int = 100
-    rate_limit_refill_rate: float = 10.0   # tokens/sec
-
-    # Circuit breaker
-    cb_failure_threshold: int = 5
-    cb_open_duration: int = 30         # seconds
-    cb_half_open_probes: int = 1
-
-    # mTLS
-    mtls_cert: str = "/certs/gw.crt"
-    mtls_key: str = "/certs/gw.key"
-    mtls_ca: str = "/certs/ca.crt"
-    mtls_enabled: bool = False         # disable in dev
-
-    # Audit
-    audit_db_path: str = "audit.db"
-    audit_flush_interval_ms: int = 100
-    audit_flush_batch_size: int = 50
-
-    # Admin
-    admin_token: str = Field(default="changeme", min_length=8)
-
-    # NL parser (Anthropic)
-    anthropic_api_key: str = ""
-    nl_model: str = "claude-haiku-4-5-20251001"
-
-    # Body size limit
-    max_body_size: int = 256 * 1024    # 256 KB
-
-    # Registry
-    registry_path: str = "registry.yaml"
-
-    # Policy version (informational)
     policy_version: str = "v1.0.0"
+    # 当前策略版本号，写入每条响应的 X-Policy-Version 头和审计日志。
+
+    # -------------------------------------------------------------------------
+    # 身份提供方（IdP）
+    # -------------------------------------------------------------------------
+
+    idp_jwks_url: str = "https://idp.local/.well-known/jwks.json"
+    # IdP 公钥集合（JWKS）的拉取地址。
+    # Gateway 启动时以及缓存过期后会向该地址请求，用于验证 JWT 签名。
+
+    idp_issuer: str = "https://idp.local"
+    # JWT 中 "iss"（签发方）字段的期望值。
+    # 若 token 的 iss 与此不匹配，将被拒绝。
+
+    jwks_cache_ttl: int = 600
+    # 公钥缓存的有效期（秒）。默认 10 分钟。
+    # 过期后后台自动刷新，支持密钥轮换而不重启服务。
+
+    jwks_max_keys: int = 10
+    # 公钥 LRU 缓存最多保留的条目数。
+    # 同一时期 IdP 通常只有 2-3 个活跃密钥，10 已足够。
+
+    # -------------------------------------------------------------------------
+    # OPA（开放策略代理）授权服务
+    # -------------------------------------------------------------------------
+
+    opa_url: str = "http://opa.local:8181/v1/data/agent/authz"
+    # OPA 授权决策接口的基础地址。
+    # Gateway 每次请求都会向该地址的 /allow 子路径发送授权查询。
+
+    opa_timeout_ms: int = 5
+    # OPA 请求的超时时间（毫秒）。默认 5ms。
+    # 若超时或连接失败，Gateway 立即拒绝本次请求（失败关闭策略）。
+
+    # -------------------------------------------------------------------------
+    # Redis
+    # -------------------------------------------------------------------------
+
+    redis_url: str = "redis://localhost:6379/0"
+    # Redis 连接地址，支持 redis:// 和 rediss://（TLS）两种格式。
+    # Redis 承担：撤销黑名单、DPoP 重放防御、一次性令牌标记、速率限制桶。
+
+    redis_password: str = ""
+    # Redis 认证密码，留空表示不需要密码。
+
+    # -------------------------------------------------------------------------
+    # mTLS（双向 TLS）—— Gateway 与各 Agent 之间的通信证书
+    # -------------------------------------------------------------------------
+
+    mtls_cert: str = "/certs/gw.crt"
+    # Gateway 自身的 TLS 客户端证书路径。
+    # 向 Agent 发起 HTTPS 请求时用于身份证明。
+
+    mtls_key: str = "/certs/gw.key"
+    # 与 mtls_cert 配套的私钥路径。
+
+    mtls_ca: str = "/certs/ca.crt"
+    # 签发所有服务证书的根 CA 证书路径。
+    # 用于验证 Agent 返回的服务端证书是否受信任。
+
+    mtls_enabled: bool = False
+    # 是否启用 mTLS。False 时 Gateway 与 Agent 之间使用普通 HTTPS（仅验证服务端证书）。
+
+    # -------------------------------------------------------------------------
+    # JWT 委托链
+    # -------------------------------------------------------------------------
+
+    delegation_max_depth: int = 4
+    # JWT act（代理）字段允许的最大嵌套层数。
+    # 例如 A → B → C 为深度 2；超过此值返回 AUTHZ_DEPTH_EXCEEDED 错误。
+
+    # -------------------------------------------------------------------------
+    # DPoP（持有证明令牌）验证参数
+    # -------------------------------------------------------------------------
+
+    dpop_max_iat_skew: int = 60
+    # DPoP proof JWT 中 iat（签发时间）允许的时钟偏差（秒）。
+    # 客户端与服务器时间相差超过此值，DPoP 验证将失败。
+
+    dpop_jti_ttl: int = 120
+    # DPoP jti（唯一标识）在 Redis 中的保留时间（秒）。
+    # 在此窗口内同一 jti 第二次出现即视为重放攻击并拒绝。
+
+    # -------------------------------------------------------------------------
+    # 速率限制（令牌桶算法）
+    # -------------------------------------------------------------------------
+
+    rate_limit_capacity: int = 100
+    # 每个"调用方 + 动作"组合的令牌桶容量（最大积累令牌数）。
+    # 代表允许的最大突发请求数。
+
+    rate_limit_refill_rate: float = 10.0
+    # 令牌桶每秒补充的令牌数。
+    # 代表允许的持续平均请求速率（每秒 10 次）。
+
+    # -------------------------------------------------------------------------
+    # 熔断器（Circuit Breaker）
+    # -------------------------------------------------------------------------
+
+    cb_failure_threshold: int = 5
+    # 连续失败多少次后将熔断器切换为"断开"状态。
+    # 断开后该上游的所有请求直接返回 503 CIRCUIT_OPEN，不再实际发送。
+
+    cb_open_duration: int = 30
+    # 熔断器断开后，等待多少秒进入"半开"状态。
+    # 半开时放行探针请求，成功则恢复，失败则重新断开。
+
+    cb_half_open_probes: int = 1
+    # 半开状态下允许通过的探针请求数量。
+
+    # -------------------------------------------------------------------------
+    # 审计日志
+    # -------------------------------------------------------------------------
+
+    audit_db_path: str = "./audit.db"
+    # SQLite 审计数据库的文件路径，相对于服务启动目录。
+    # 每条授权决策（允许或拒绝）以及每次令牌消耗都会写入此文件。
+
+    audit_flush_interval_ms: int = 100
+    # 审计事件的批量写入间隔（毫秒）。
+    # 后台协程每隔此时间或积累 50 条事件时执行一次批量写入。
+
+    audit_batch_size: int = 50
+    # 触发提前写入的事件积累数量阈值。
+    # 与 audit_flush_interval_ms 共同控制写入频率，两个条件满足其一即写。
+
+    # -------------------------------------------------------------------------
+    # 管理接口
+    # -------------------------------------------------------------------------
+
+    admin_token: str = "change-me-in-production"
+    # 调用 /admin/reload 接口所需的 Bearer Token。
+    # 生产环境必须替换为强随机值，切勿使用默认值。
+
+    registry_path: str = "registry.yaml"
+    # 上游 Agent 注册表的文件路径。
+    # 记录每个 agent_id 对应的 upstream URL、超时、重试策略等。
+
+    # -------------------------------------------------------------------------
+    # Bloom 过滤器（撤销预检）
+    # -------------------------------------------------------------------------
+
+    bloom_capacity: int = 100_000
+    # Bloom 过滤器预期存储的最大元素数量。
+    # 超过此数量后误报率将上升。若撤销量大，建议适当增加。
+
+    bloom_error_rate: float = 0.001
+    # Bloom 过滤器允许的最大误报率（0.001 = 0.1%）。
+    # 误报只会多一次 Redis 精确查询，不会产生错误拒绝。
+
+    class Config:
+        env_prefix = "GW_"
+        # 所有字段均可用 GW_<大写字段名> 环境变量覆盖。
+        # 例如：GW_OPA_TIMEOUT_MS=10 将把 OPA 超时改为 10ms。
 
 
 settings = Settings()
