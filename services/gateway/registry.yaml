@@ -1,27 +1,34 @@
-# Agent registry — used by gateway routing layer.
-# Internal compose service URLs; mTLS off for dev.
 agents:
   doc_assistant:
-    upstream: http://doc-assistant:8100
+    upstream: https://doc-assistant.local:8001
     transport: http
     timeout_ms: 30000
     retry:
-      max: 0          # write-side: no retry
-    mtls: {}
+      max: 0        # write operations: no retry
+    mtls:
+      cert: /certs/gw.crt
+      key:  /certs/gw.key
+      ca:   /certs/ca.crt
 
   data_agent:
-    upstream: http://data-agent:8101
+    upstream: https://data-agent.local:8002
     transport: http
     timeout_ms: 10000
     retry:
       max: 2
       backoff_ms: 200
-    mtls: {}
+    mtls:
+      cert: /certs/gw.crt
+      key:  /certs/gw.key
+      ca:   /certs/ca.crt
 
   web_agent:
-    upstream: http://web-agent:8102
+    upstream: https://web-agent.local:8003
     transport: http
     timeout_ms: 15000
     retry:
       max: 1
-    mtls: {}
+    mtls:
+      cert: /certs/gw.crt
+      key:  /certs/gw.key
+      ca:   /certs/ca.crt

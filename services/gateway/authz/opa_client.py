@@ -7,7 +7,7 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-_OPA_URL = settings.opa_url
+_OPA_URL = f"{settings.opa_url}/allow"
 
 
 async def check_authz(

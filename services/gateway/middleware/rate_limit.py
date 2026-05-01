@@ -48,11 +48,9 @@ async def rate_limit_middleware(request: Request, call_next):
     if claims is None:
         return await call_next(request)
 
-    agent_id = claims.get("sub", "unknown")
-    # extract action from body or intent already parsed
-    intent = getattr(request.state, "intent", None)
-    action = intent["action"] if intent else "default"
-    bucket_key = f"rl:{agent_id}:{action}"
+    sub = claims.get("sub", "unknown")
+    target_agent = request.headers.get("X-Target-Agent", "unknown")
+    bucket_key = f"rl:{sub}:{target_agent}"
 
     redis: aioredis.Redis = request.app.state.redis
     now = time.time()

@@ -20,7 +20,7 @@ _DIM_MAP = {
     "plan":  "revoked:plans",
 }
 
-
+# 使用订阅机制, 将已经过期的 JWT 填入 Bloom Filter
 async def run_subscriber(redis_client: aioredis.Redis) -> None:
     """Long-running coroutine; call via asyncio.create_task."""
     pubsub = redis_client.pubsub()

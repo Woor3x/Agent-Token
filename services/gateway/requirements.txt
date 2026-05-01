@@ -12,3 +12,4 @@ pyyaml>=6.0.1
 python-multipart>=0.0.9
 prometheus-client>=0.20.0
 jsonschema>=4.22.0
+mmh3>=4.1.0

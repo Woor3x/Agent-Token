@@ -17,21 +17,22 @@ uvicorn main:app --host 0.0.0.0 --port 8080
 
 ## 中间件链
 
+Starlette 注册顺序与执行顺序相反（后注册先执行），实际执行顺序如下：
+
 ```
 Request
-  → trace_middleware       # W3C traceparent 生成/传播
-  → authn_middleware       # JWT 验签 + 4 维撤销 + DPoP 校验
-  → rate_limit_middleware  # Token bucket per agent+action
+  → trace_middleware       # W3C traceparent 生成/传播；baggage 仅携带 trace_id
+  → authn_middleware       # JWT 验签 + 4 维撤销（全部直接查 Redis）+ DPoP 校验
+  → rate_limit_middleware  # Token bucket，key 为 rl:{sub}:{target_agent}
   → (路由处理器)
-      → Intent 解析        # JSON Schema 严格校验 / NL LLM tool-calling
+      → Intent 解析        # JSON Schema 严格校验
       → Delegation 验证    # act 链递归 + 环检测 + max_depth
-      → OPA authz          # HTTP 5ms timeout, fail-closed
+      → OPA authz          # HTTP 5ms timeout，fail-closed
       → One-Shot Consume   # Redis SETNX jti:used
-      → Trace 注入         # traceparent + baggage
-      → Router             # registry.yaml → upstream URL
+      → ForwardContext 构造 # 补充 baggage（plan_id/sub）、过滤敏感请求头
       → Circuit Breaker    # per upstream closed/open/half-open
       → Upstream Call      # httpx AsyncClient + mTLS
-      → Response Sanitize  # 剥敏感 header
+      → Response Sanitize  # 剥敏感响应头
       → Audit Write        # asyncio.Queue → SQLite
 ```
 
@@ -40,7 +41,6 @@ Request
 | Method | Path | 说明 |
 |--------|------|------|
 | POST | `/a2a/invoke` | 单次 A2A 调用（P0） |
-| POST | `/a2a/nl` | 自然语言入口（P1） |
 | POST | `/a2a/plan/submit` | DAG 编排提交（P1） |
 | GET  | `/a2a/plan/{plan_id}/status` | DAG 状态查询（P2） |
 | GET  | `/healthz` | 健康检查 |
@@ -91,19 +91,18 @@ gateway/
 ├── registry.yaml        # agent_id → upstream 映射
 ├── bench.py             # 性能压测脚本
 ├── middleware/
-│   ├── authn.py         # JWT + DPoP + 4 维撤销
+│   ├── authn.py         # JWT + DPoP + 4 维撤销（全部直接查 Redis，fail-closed）
 │   ├── rate_limit.py    # Token bucket (Lua + Redis)
 │   ├── trace.py         # W3C traceparent
 │   └── audit.py         # asyncio.Queue → SQLite
 ├── intent/
 │   ├── schema.py        # JSON Schema + validator
-│   ├── parser_structured.py
-│   └── parser_nl.py     # Anthropic tool-calling + injection 防御
+│   └── parser_structured.py
 ├── authz/
 │   ├── opa_client.py    # OPA HTTP client, fail-closed
 │   ├── delegation.py    # act 链 + 环检测
 │   └── one_shot.py      # SETNX 销毁
-├── token/
+├── jwt_token/
 │   ├── jwks_cache.py    # LRU + 10min 刷新 + 多 kid
 │   └── dpop.py          # DPoP proof 验证
 ├── routing/
@@ -111,11 +110,10 @@ gateway/
 │   ├── circuit_breaker.py
 │   └── upstream_client.py  # httpx + mTLS + sanitizer
 ├── revoke/
-│   ├── bloom.py         # Bloom filter (pre-check)
-│   └── subscriber.py    # Redis Pub/Sub → bloom.add
+│   ├── bloom.py         # Bloom filter（内部数据结构，不参与鉴权路径）
+│   └── subscriber.py    # Redis Pub/Sub → bloom.add；崩溃后自动重连
 ├── routes/
 │   ├── invoke.py        # POST /a2a/invoke
-│   ├── nl.py            # POST /a2a/nl
 │   ├── plan.py          # POST /a2a/plan/submit + GET status
 │   └── admin.py         # POST /admin/reload
 └── tests/
@@ -137,7 +135,6 @@ gateway/
 | `GW_REDIS_URL` | `redis://redis.local:6379/0` | Redis 连接 |
 | `GW_ADMIN_TOKEN` | `changeme` | `/admin/reload` 鉴权 |
 | `GW_MTLS_ENABLED` | `false` | 是否启用 mTLS |
-| `GW_ANTHROPIC_API_KEY` | `""` | NL parser 使用 |
 | `GW_DELEGATION_MAX_DEPTH` | `4` | 最大委托链深度 |
 | `GW_AUDIT_DB_PATH` | `audit.db` | SQLite 路径 |
 

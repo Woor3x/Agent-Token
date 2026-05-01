@@ -8,9 +8,8 @@ from fastapi.responses import JSONResponse
 
 from config import settings
 from errors import authn_invalid, authn_revoked, authn_dpop_invalid, GatewayError
-from revoke.bloom import revoke_bloom
-from jwttoken.dpop import verify_dpop
-from jwttoken.jwks_cache import jwks_cache
+from jwt_token.dpop import verify_dpop
+from jwt_token.jwks_cache import jwks_cache
 
 logger = logging.getLogger(__name__)
 
@@ -44,14 +43,12 @@ async def authn_middleware(request: Request, call_next):
         key = await jwks_cache.get(kid)
 
         target_agent = request.headers.get("X-Target-Agent", "")
-        # M1 IdP signs ``aud = bare agent_id`` (no ``agent:`` prefix). Original
-        # M2 gateway expected the prefix; relax to bare to match M1.
         claims = jwt.decode(
             token,
             key=key,
             algorithms=["RS256"],
             issuer=settings.idp_issuer,
-            audience=target_agent if target_agent else None,
+            audience=f"agent:{target_agent}" if target_agent else None,
             options={"require": ["exp", "nbf", "iat", "jti", "sub", "aud"]},
             leeway=30,
         )
@@ -59,22 +56,29 @@ async def authn_middleware(request: Request, call_next):
         if not claims.get("one_time"):
             raise authn_invalid("not a one-time token")
 
-        # 4-dim revocation
+        # 4 维撤销查询，全部直接查 Redis，不经过 Bloom 过滤器
         redis: aioredis.Redis = request.app.state.redis
         jti = claims["jti"]
         sub = claims.get("sub", "")
         trace_id = claims.get("trace_id", "")
         plan_id = claims.get("plan_id", "")
 
-        if revoke_bloom.might_contain(jti):
+        try:
             if await redis.sismember("revoked:jtis", jti):
                 raise authn_revoked("jti")
-        if sub and await redis.sismember("revoked:subs", sub):
-            raise authn_revoked("sub")
-        if trace_id and await redis.sismember("revoked:traces", trace_id):
-            raise authn_revoked("trace")
-        if plan_id and await redis.sismember("revoked:plans", plan_id):
-            raise authn_revoked("plan")
+            if sub and await redis.sismember("revoked:subs", sub):
+                raise authn_revoked("sub")
+            if trace_id and await redis.sismember("revoked:traces", trace_id):
+                raise authn_revoked("trace")
+            if plan_id and await redis.sismember("revoked:plans", plan_id):
+                raise authn_revoked("plan")
+        except GatewayError:
+            raise
+        except Exception as exc:
+            logger.error("redis unavailable during revocation check: %s", exc)
+            err = GatewayError("SERVER_ERROR", "redis unavailable")
+            err.http_status = 503
+            raise err
 
         # DPoP proof
         dpop_token = request.headers.get("DPoP", "")

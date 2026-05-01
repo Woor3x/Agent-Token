@@ -64,7 +64,7 @@ class AuditWriter:
 
     async def _flush_loop(self) -> None:
         interval = settings.audit_flush_interval_ms / 1000
-        batch_size = settings.audit_flush_batch_size
+        batch_size = settings.audit_batch_size
         while True:
             try:
                 await asyncio.sleep(interval)
@@ -76,7 +76,7 @@ class AuditWriter:
 
     async def _drain(self) -> None:
         while not self._queue.empty():
-            await self._flush_batch(settings.audit_flush_batch_size)
+            await self._flush_batch(settings.audit_batch_size)
 
     async def _flush_batch(self, n: int) -> None:
         rows = []
