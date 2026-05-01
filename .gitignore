@@ -110,5 +110,3 @@ keys/
 
 # Local override of compose
 docker-compose.override.yml
-
-tests/
