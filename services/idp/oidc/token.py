@@ -94,7 +94,9 @@ async def _handle_code_exchange(
 
     user_id = session["user_id"]
     scope_list = session.get("scope", "openid profile agent:invoke").split()
-    effective_scopes = list(set(USER_SCOPES) & set(scope_list)) or USER_SCOPES
+    effective_scopes = list(set(USER_SCOPES) & set(scope_list))
+    if not effective_scopes:
+        raise InvalidGrant("Requested scopes are not permitted for this client")
 
     access_token, _ = _sign_user_token(user_id, effective_scopes)
     id_token = _sign_id_token(user_id, session.get("client_id", "web-ui"), session.get("nonce"))

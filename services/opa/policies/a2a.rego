@@ -140,6 +140,12 @@ _plan_not_revoked if {
 # Gateway 负责验证 DPoP proof 签名；OPA 确认声明存在
 # ─────────────────────────────────────────────────────────────────────────────
 dpop_bound if {
+    # Explicitly guard on cnf presence before accessing jkt.
+    # If cnf is absent, input.token.cnf is `undefined`; OPA would treat the
+    # condition as false (correct behaviour) but the intent is not obvious.
+    # Two-step check makes the invariant explicit and avoids any future
+    # ambiguity when the rule is extended.
+    input.token.cnf
     input.token.cnf.jkt != ""
 }
 

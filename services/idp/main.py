@@ -67,7 +67,8 @@ async def request_middleware(request: Request, call_next):
     response = await call_next(request)
 
     elapsed = time.monotonic() - start
-    path = request.url.path
+    route = request.scope.get("route")
+    path = route.path if route else "other"
     method = request.method
     status = response.status_code
 

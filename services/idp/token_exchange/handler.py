@@ -80,14 +80,14 @@ async def token_exchange(
     user = await verify_subject_token(subject_token)
 
     # Phase 3: Verify DPoP proof
-    dpop_jkt: Optional[str] = None
-    if dpop:
-        dpop_claims = await verify_dpop_proof(
-            dpop,
-            expected_htm="POST",
-            expected_htu=_canonical_exchange_url(request),  # Fix A: honours X-Forwarded-* headers
-        )
-        dpop_jkt = dpop_claims.jkt
+    if not dpop:
+        raise InvalidRequest("DPoP proof header is required for token exchange")
+    dpop_claims = await verify_dpop_proof(
+        dpop,
+        expected_htm="POST",
+        expected_htu=_canonical_exchange_url(request),  # Fix A: honours X-Forwarded-* headers
+    )
+    dpop_jkt = dpop_claims.jkt
 
     # Phase 4: Parse scope → (action, resource)
     action, resource_value = parse_scope(scope)
@@ -131,11 +131,20 @@ async def token_exchange(
         raise EmptyEffectiveScope("Effective scope became empty after context evaluation")
 
     # Phase 9: Rate limiting per agent+action
+    _cap_entry = next(
+        (c for c in callee_cap.capabilities if c.action == action), None
+    )
+    rate_limit = (
+        _cap_entry.constraints.get("max_calls_per_minute", 100)
+        if _cap_entry else 100
+    )
     rate_key = f"rate:agent:{orchestrator.agent_id}:{action}"
-    count, allowed = await incr_with_window(rate_key, 60, 100)
+    count, allowed = await incr_with_window(rate_key, 60, rate_limit)
     if not allowed:
         from errors import RateLimited
-        raise RateLimited(f"Agent {orchestrator.agent_id} rate limit for {action}: {count}/min")
+        raise RateLimited(
+            f"Agent {orchestrator.agent_id} rate limit for {action}: {count}/{rate_limit} per min"
+        )
 
     # Phase 10: Sign delegated token and write audit
     token_claims = {
@@ -152,8 +161,7 @@ async def token_exchange(
         "purpose": purpose,
         "resource": resource,
     }
-    if dpop_jkt:
-        token_claims["cnf"] = {"jkt": dpop_jkt}
+    token_claims["cnf"] = {"jkt": dpop_jkt}
 
     token_claims = {k: v for k, v in token_claims.items() if v is not None}
 
