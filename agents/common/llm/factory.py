@@ -9,6 +9,10 @@ ARK_BASE     : default https://ark.cn-beijing.volces.com/api/v3
 OPENAI_*     : standard OpenAI envs
 
 Falls back to ``MockLLMProvider`` so tests and offline demos always work.
+
+``model=`` overrides the provider default; useful when the caller wants the
+factory's provider selection but a per-instance model (e.g. cheaper endpoint
+for the planner, larger one for the synthesizer).
 """
 from __future__ import annotations
 
@@ -18,16 +22,20 @@ from .base import LLMProvider
 from .mock import MockLLMProvider
 
 
-def make_llm(*, provider: str | None = None) -> LLMProvider:
+def make_llm(
+    *,
+    provider: str | None = None,
+    model: str | None = None,
+) -> LLMProvider:
     name = (provider or os.environ.get("LLM_PROVIDER", "mock")).lower()
     if name == "volc":
         from .volc import VolcArkProvider
 
-        return VolcArkProvider()
+        return VolcArkProvider(model=model)
     if name == "openai":
         from .openai import OpenAIProvider
 
-        return OpenAIProvider()
+        return OpenAIProvider(model=model)
     if name == "mock":
-        return MockLLMProvider()
+        return MockLLMProvider(model=model or "mock-model")
     raise ValueError(f"unknown LLM_PROVIDER: {name}")
