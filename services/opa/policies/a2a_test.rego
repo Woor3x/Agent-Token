@@ -93,7 +93,7 @@ _base_input := {
 # ── test 1: 正常 allow 路径 ────────────────────────────────────────────────────
 
 test_allow_doc_to_data if {
-    agent.authz.allow with input as _base_input with data as _base_data
+    data.agent.authz.allow with input as _base_input with data as _base_data
 }
 
 # ── test 2: executor 不匹配 ────────────────────────────────────────────────────
@@ -101,8 +101,8 @@ test_allow_doc_to_data if {
 
 test_deny_executor_mismatch if {
     bad_input := object.union(_base_input, {"target_agent": "web_agent"})
-    not agent.authz.allow with input as bad_input with data as _base_data
-    reasons := agent.authz.reasons with input as bad_input with data as _base_data
+    not data.agent.authz.allow with input as bad_input with data as _base_data
+    reasons := data.agent.authz.reasons with input as bad_input with data as _base_data
     "executor_mismatch" in reasons
 }
 
@@ -112,8 +112,8 @@ test_deny_executor_mismatch if {
 test_deny_delegation_rejected if {
     bad_token := object.union(_base_token, {"act": {"sub": "rogue_agent", "act": null}})
     bad_input  := object.union(_base_input, {"token": bad_token})
-    not agent.authz.allow with input as bad_input with data as _base_data
-    reasons := agent.authz.reasons with input as bad_input with data as _base_data
+    not data.agent.authz.allow with input as bad_input with data as _base_data
+    reasons := data.agent.authz.reasons with input as bad_input with data as _base_data
     "delegation_rejected" in reasons
 }
 
@@ -124,8 +124,8 @@ test_deny_depth_exceeded if {
     deep_act  := {"sub": "doc_assistant", "act": {"sub": "orchestrator", "act": {"sub": "user", "act": null}}}
     bad_token := object.union(_base_token, {"act": deep_act})
     bad_input  := object.union(_base_input, {"token": bad_token})
-    not agent.authz.allow with input as bad_input with data as _base_data
-    reasons := agent.authz.reasons with input as bad_input with data as _base_data
+    not data.agent.authz.allow with input as bad_input with data as _base_data
+    reasons := data.agent.authz.reasons with input as bad_input with data as _base_data
     "depth_exceeded" in reasons
 }
 
@@ -140,8 +140,8 @@ test_deny_revoked_jti if {
         "plans":  {},
         "chains": {},
     }})
-    not agent.authz.allow with input as _base_input with data as bad_data
-    reasons := agent.authz.reasons with input as _base_input with data as bad_data
+    not data.agent.authz.allow with input as _base_input with data as bad_data
+    reasons := data.agent.authz.reasons with input as _base_input with data as bad_data
     "revoked" in reasons
 }
 
@@ -150,8 +150,8 @@ test_deny_revoked_jti if {
 test_deny_dpop_unbound if {
     bad_token := object.union(_base_token, {"cnf": {"jkt": ""}})
     bad_input  := object.union(_base_input, {"token": bad_token})
-    not agent.authz.allow with input as bad_input with data as _base_data
-    reasons := agent.authz.reasons with input as bad_input with data as _base_data
+    not data.agent.authz.allow with input as bad_input with data as _base_data
+    reasons := data.agent.authz.reasons with input as bad_input with data as _base_data
     "dpop_unbound" in reasons
 }
 
@@ -180,7 +180,7 @@ test_plan_allow_batch if {
         ],
         "context": {"time": _now, "delegation_depth": 1},
     }
-    result := agent.authz.plan_allow with input as plan_input with data as _plan_data
+    result := data.agent.authz.plan_allow with input as plan_input with data as _plan_data
     result.overall == "allow"
     count(result.per_task) == 1
     result.per_task[0].allow == true
@@ -204,7 +204,7 @@ test_plan_deny_partial if {
         ],
         "context": {"time": _now, "delegation_depth": 1},
     }
-    result := agent.authz.plan_allow with input as plan_input with data as _plan_data
+    result := data.agent.authz.plan_allow with input as plan_input with data as _plan_data
     result.overall == "deny"
     t2 := [t | some t in result.per_task; t.id == "t2"][0]
     t2.allow == false

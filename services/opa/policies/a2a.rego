@@ -166,6 +166,8 @@ _rate_limit_exceeded if {
     input.context.recent_calls > cap.constraints.max_calls_per_minute
 }
 
+default _out_of_hours_write := false
+
 #_out_of_hours_write if {
 #    startswith(input.intent.action, "feishu.doc.write")
 #    hour := time.clock(time.now_ns())[0]

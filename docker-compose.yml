@@ -46,12 +46,11 @@ services:
 
   opa:
     image: openpolicyagent/opa:0.63.0
-    command: run --server --log-level info /policies /data
+    command: run --server --log-level info --ignore='*_test.rego' /policies /data
     volumes:
       - ./services/opa/policies:/policies:ro
       - ./services/opa/data:/data:ro
     ports: ["8181:8181"]
-    # OPA image is distroless — no wget/curl. Use opa CLI itself.
     healthcheck:
       test: ["CMD", "/opa", "eval", "-f", "raw", "1+1"]
       interval: 5s
