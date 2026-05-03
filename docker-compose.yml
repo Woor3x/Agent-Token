@@ -128,8 +128,6 @@ services:
       GW_MTLS_ENABLED: "false"
       GW_AUDIT_DB_PATH: /data/gateway-audit.db
       GW_ADMIN_TOKEN: admin-secret-token
-      GW_ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      GW_NL_MODEL: claude-haiku-4-5-20251001
       GW_REGISTRY_PATH: /app/registry.yaml
       GW_POLICY_VERSION: v1.2.0
     volumes:

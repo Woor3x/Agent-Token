@@ -37,6 +37,11 @@ class MockLLMProvider(LLMProvider):
         max_tokens: int = 1024,
         json_mode: bool = False,
         timeout: float = 30.0,
+        model: str | None = None,
+        trace_id: str | None = None,
+        top_p: float | None = None,
+        stop: list[str] | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> ChatResult:
         if self._rule is not None:
             content = self._rule(messages)
@@ -50,7 +55,8 @@ class MockLLMProvider(LLMProvider):
             content = f"[mock] {last_user[:200]}"
         return ChatResult(
             content=content,
-            model=self._model,
+            model=model or self._model,
             usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
             finish_reason="stop",
+            request_id=trace_id or None,
         )
