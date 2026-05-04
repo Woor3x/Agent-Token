@@ -3,6 +3,10 @@ from __future__ import annotations
 
 import httpx
 
+from ._http import parse_or_raise, request_with_retry
+
+_ENDPOINT = "/open-apis/contact/v3/departments/{dept_id}/users"
+
 
 async def list_users(
     *,
@@ -11,16 +15,16 @@ async def list_users(
     dept_id: str,
     client: httpx.AsyncClient | None = None,
 ) -> list[dict]:
-    url = f"{base.rstrip('/')}/open-apis/contact/v3/departments/{dept_id}/users"
+    path = _ENDPOINT.format(dept_id=dept_id)
+    url = f"{base.rstrip('/')}{path}"
     own = client is None
     c = client or httpx.AsyncClient(timeout=5.0)
     try:
-        r = await c.get(url, headers={"Authorization": f"Bearer {token}"})
-        r.raise_for_status()
-        body = r.json()
+        r = await request_with_retry(
+            c, "GET", url, headers={"Authorization": f"Bearer {token}"}
+        )
+        body = parse_or_raise(r, endpoint=path)
     finally:
         if own:
             await c.aclose()
-    if body.get("code") != 0:
-        raise RuntimeError(f"feishu contact error: {body}")
-    return body.get("data", {}).get("items", [])
+    return (body.get("data") or {}).get("items") or []

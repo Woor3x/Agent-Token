@@ -19,8 +19,15 @@ x-agent-env: &agent-env
   IDP_TOKEN_EXCHANGE_URL: http://idp:8000/token/exchange
   ADMIN_TOKEN: admin-secret-token
   GATEWAY_URL: http://gateway:9200
-  FEISHU_BASE: http://feishu-mock:9000
-  FEISHU_MOCK: "true"
+  # FEISHU_BASE 默认 mock，可在 .env 覆盖为 https://open.feishu.cn 接真飞书。
+  # 当 FEISHU_BASE 不是 feishu-mock 时，oauth.py 会 fail-fast 拦住占位凭证，避免误打 prod。
+  FEISHU_BASE: ${FEISHU_BASE:-http://feishu-mock:9000}
+  FEISHU_MOCK: ${FEISHU_MOCK:-true}
+  FEISHU_APP_ID: ${FEISHU_APP_ID:-}
+  FEISHU_APP_SECRET: ${FEISHU_APP_SECRET:-}
+  FEISHU_BITABLE_APP_TOKEN: ${FEISHU_BITABLE_APP_TOKEN:-}
+  FEISHU_BITABLE_TABLE_ID: ${FEISHU_BITABLE_TABLE_ID:-}
+  FEISHU_DOCX_FOLDER_TOKEN: ${FEISHU_DOCX_FOLDER_TOKEN:-}
   MOCK_AUTH: "false"
   VERIFY_DPOP: "false"
   POLICY_VERSION: v1.2.0
