@@ -1,6 +1,8 @@
 import asyncio
+import json
 import logging
 import time
+from datetime import datetime
 from typing import Optional
 
 from ulid import ULID
@@ -17,6 +19,67 @@ _QUEUE_MAXSIZE = 10_000
 # Retry back-off on DB flush failure (seconds).
 _BACKOFF_INITIAL = 0.5
 _BACKOFF_MAX = 30.0
+
+# ── Audit API forwarding (fire-and-forget) ────────────────────────────────────
+
+_TYPE_MAP = {
+    "token.issue": "token_issued",
+    "token.revoke": "revoke_issued",
+    "agent.register": "agent_registered",
+}
+
+
+def _to_audit_event(event: dict) -> dict:
+    """Map an IdP audit event dict → audit-api event schema."""
+    ts = event.get("ts")
+    timestamp = (
+        datetime.utcfromtimestamp(ts).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+        if ts is not None
+        else None
+    )
+    payload = event.get("payload") or {}
+    deny_raw = event.get("deny_reasons")
+    if isinstance(deny_raw, str):
+        try:
+            deny_reasons = json.loads(deny_raw)
+        except Exception:
+            deny_reasons = []
+    else:
+        deny_reasons = deny_raw or []
+
+    return {
+        "event_type": _TYPE_MAP.get(event.get("event_type", ""), event.get("event_type", "")),
+        "timestamp": timestamp,
+        "trace_id": event.get("trace_id"),
+        "plan_id": event.get("plan_id"),
+        "task_id": event.get("task_id"),
+        "caller_sub": event.get("sub"),
+        "caller_agent": event.get("act"),
+        "token_aud": event.get("aud"),
+        "decision": event.get("decision"),
+        "deny_reasons": deny_reasons,
+        "extra": payload,
+    }
+
+
+async def _forward_to_audit_api(batch: list[dict]) -> None:
+    """POST a batch of IdP events to the central audit-api. Silently ignores all errors."""
+    from config import settings  # local import to avoid circular at module level
+    url = settings.audit_api_url
+    token = settings.audit_api_token
+    if not url or not token:
+        return
+    try:
+        import httpx
+        events = [_to_audit_event(e) for e in batch]
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            await client.post(
+                f"{url}/audit/events",
+                json={"events": events},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+    except Exception as exc:
+        logger.debug("audit-api forward failed (non-fatal): %s", exc)
 
 
 class AuditWriter:
@@ -67,6 +130,7 @@ class AuditWriter:
         if batch:
             try:
                 await db.insert_audit_batch(batch)
+                asyncio.create_task(_forward_to_audit_api(batch))
             except Exception as exc:
                 logger.error(
                     "audit drain failed, %d events lost: %s", len(batch), exc
@@ -96,6 +160,7 @@ class AuditWriter:
                 await db.insert_audit_batch(batch)
                 # Reset back-off on success.
                 self._backoff = _BACKOFF_INITIAL
+                asyncio.create_task(_forward_to_audit_api(batch))
             except Exception as exc:
                 # Fix D: don't silently swallow failures.
                 # Re-queue events so they aren't permanently lost on transient

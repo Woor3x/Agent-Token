@@ -18,6 +18,14 @@ class Settings(BaseSettings):
     allowed_source_nets: str = "0.0.0.0/0"
     kms_keys_dir: str = "/app/kms/keys"
 
+    # Audit API forwarding (optional) — populated via AUDIT_API_URL / AUDIT_API_TOKEN env vars
+    audit_api_url: str = ""
+    # If set, audit events are forwarded to this URL after local SQLite write.
+    # Example: http://audit-api:8090
+
+    audit_api_token: str = ""
+    # Bearer token sent to Audit API as the IdP service identity.
+
     @property
     def redirect_uris_list(self) -> list[str]:
         return [u.strip() for u in self.allowed_redirect_uris.split(",") if u.strip()]

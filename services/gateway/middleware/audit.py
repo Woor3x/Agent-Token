@@ -1,9 +1,10 @@
-"""Async audit writer — asyncio.Queue → batch flush to SQLite."""
+"""Async audit writer — asyncio.Queue → batch flush to SQLite + optional Audit API forward."""
 import asyncio
 import json
 import logging
 import time
 import uuid
+from datetime import datetime
 
 import aiosqlite
 
@@ -117,6 +118,56 @@ class AuditWriter:
             ],
         )
         await self._db.commit()
+        # Forward a copy to the central audit-api (non-blocking, best-effort)
+        asyncio.create_task(_forward_to_audit_api(rows))
 
 
 audit_writer = AuditWriter()
+
+
+# ── Audit API forwarding (fire-and-forget) ────────────────────────────────────
+
+def _to_audit_event(r: dict) -> dict:
+    """Map a gateway audit row dict → audit-api event schema."""
+    ts = r.get("ts")
+    timestamp = (
+        datetime.utcfromtimestamp(ts).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+        if ts is not None
+        else None
+    )
+    return {
+        "event_type": "authz_decision",
+        "timestamp": timestamp,
+        "trace_id": r.get("trace_id"),
+        "plan_id": r.get("plan_id"),
+        "decision": r.get("decision"),
+        "deny_reasons": json.loads(r.get("deny_reasons") or "[]"),
+        "caller_sub": r.get("sub"),
+        "callee_agent": r.get("target_agent"),
+        "callee_action": r.get("action"),
+        "callee_resource": r.get("resource"),
+        "caller_jti": r.get("jti"),
+        "dpop_jkt": r.get("dpop_jti"),
+        "raw_prompt": r.get("raw_prompt"),
+        "latency_ms": r.get("duration_ms"),
+        "extra": json.loads(r.get("extra") or "{}"),
+    }
+
+
+async def _forward_to_audit_api(rows: list[dict]) -> None:
+    """POST a batch of events to the central audit-api. Silently ignores all errors."""
+    url = settings.audit_api_url
+    token = settings.audit_api_token
+    if not url or not token:
+        return
+    try:
+        import httpx
+        events = [_to_audit_event(r) for r in rows]
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            await client.post(
+                f"{url}/audit/events",
+                json={"events": events},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+    except Exception as exc:
+        logger.debug("audit-api forward failed (non-fatal): %s", exc)

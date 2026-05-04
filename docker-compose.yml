@@ -1,4 +1,4 @@
-## Agent-Token full integration stack — M1 (IdP + OPA + Redis) + M4/M5 agents + sdk.
+## Agent-Token full integration stack — M1 (IdP + OPA + Redis) + M2 (Gateway) + M3 (AuditAPI) + M4/M5 agents + sdk.
 ##
 ## Bring up:
 ##     docker compose up --build
@@ -9,6 +9,7 @@
 ##     curl http://localhost:8000/healthz
 ##     curl http://localhost:9000/healthz
 ##     curl http://localhost:9200/healthz
+##     curl http://localhost:8090/healthz
 ##     curl http://localhost:8100/healthz
 
 x-agent-env: &agent-env
@@ -73,6 +74,8 @@ services:
       USERS_DIR: /data/users
       ALLOWED_REDIRECT_URIS: http://localhost:3000/callback,https://web-ui.local/callback
       ALLOWED_SOURCE_NETS: 0.0.0.0/0
+      AUDIT_API_URL: http://audit-api:8090
+      AUDIT_API_TOKEN: idp-service-token
     volumes:
       # Mount under /data to avoid shadowing IdP's own ``capabilities``/``users`` Python packages at /app.
       - ./capabilities:/data/capabilities:ro
@@ -130,6 +133,8 @@ services:
       GW_ADMIN_TOKEN: admin-secret-token
       GW_REGISTRY_PATH: /app/registry.yaml
       GW_POLICY_VERSION: v1.2.0
+      GW_AUDIT_API_URL: http://audit-api:8090
+      GW_AUDIT_API_TOKEN: gateway-service-token
     volumes:
       - gateway_data:/data
     ports: ["9200:9200"]
@@ -140,12 +145,38 @@ services:
         condition: service_healthy
       opa:
         condition: service_healthy
+      audit-api:
+        condition: service_healthy
       doc-assistant:
         condition: service_started
       data-agent:
         condition: service_started
       web-agent:
         condition: service_started
+
+  # ---- M3 audit API ---------------------------------------------------------
+
+  audit-api:
+    build:
+      context: ./services/audit-api
+      dockerfile: Dockerfile
+    environment:
+      AUDIT_HOST: 0.0.0.0
+      AUDIT_PORT: "8090"
+      AUDIT_DB_PATH: /data/audit.db
+      AUDIT_ADMIN_TOKEN: admin-secret-token
+      AUDIT_SERVICE_TOKENS: gateway-service-token,idp-service-token,anomaly-service-token
+      AUDIT_BACKUP_DIR: /data/backup
+      AUDIT_FLUSH_INTERVAL_MS: "100"
+      AUDIT_BATCH_SIZE: "50"
+    volumes:
+      - audit_api_data:/data
+    ports: ["8090:8090"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
 
   # ---- M4 agents ------------------------------------------------------------
   #
@@ -213,6 +244,7 @@ volumes:
   idp_data:
   idp_kms:
   gateway_data:
+  audit_api_data:
   doc_assistant_keys:
   data_agent_keys:
   web_agent_keys:
