@@ -14,22 +14,25 @@ logger = logging.getLogger(__name__)
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS audit_events (
-    id          TEXT    PRIMARY KEY,
-    ts          REAL    NOT NULL,
-    trace_id    TEXT,
-    plan_id     TEXT,
-    sub         TEXT,
-    target_agent TEXT,
-    action      TEXT,
-    resource    TEXT,
-    decision    TEXT,
-    deny_reasons TEXT,
-    jti         TEXT,
-    dpop_jti    TEXT,
-    raw_prompt  TEXT,
-    source_ip   TEXT,
-    duration_ms REAL,
-    extra       TEXT
+    id              TEXT    PRIMARY KEY,
+    ts              REAL    NOT NULL,
+    trace_id        TEXT,
+    span_id         TEXT,
+    parent_span_id  TEXT,
+    plan_id         TEXT,
+    task_id         TEXT,
+    sub             TEXT,
+    target_agent    TEXT,
+    action          TEXT,
+    resource        TEXT,
+    decision        TEXT,
+    deny_reasons    TEXT,
+    jti             TEXT,
+    dpop_jti        TEXT,
+    raw_prompt      TEXT,
+    source_ip       TEXT,
+    duration_ms     REAL,
+    extra           TEXT
 )
 """
 
@@ -43,6 +46,13 @@ class AuditWriter:
     async def start(self) -> None:
         self._db = await aiosqlite.connect(settings.audit_db_path)
         await self._db.execute(_DDL)
+        # Migrate: add columns introduced after initial schema was deployed
+        for col_def in ("span_id TEXT", "parent_span_id TEXT", "task_id TEXT"):
+            col_name = col_def.split()[0]
+            try:
+                await self._db.execute(f"ALTER TABLE audit_events ADD COLUMN {col_def}")
+            except Exception:
+                pass  # Column already exists — safe to ignore
         await self._db.commit()
         self._task = asyncio.create_task(self._flush_loop())
         logger.info("audit writer started: %s", settings.audit_db_path)
@@ -88,38 +98,46 @@ class AuditWriter:
                 break
         if not rows or self._db is None:
             return
-        await self._db.executemany(
-            """INSERT OR IGNORE INTO audit_events
-               (id, ts, trace_id, plan_id, sub, target_agent, action, resource,
-                decision, deny_reasons, jti, dpop_jti, raw_prompt, source_ip, duration_ms, extra)
-               VALUES (:id, :ts, :trace_id, :plan_id, :sub, :target_agent, :action, :resource,
-                       :decision, :deny_reasons, :jti, :dpop_jti, :raw_prompt, :source_ip,
-                       :duration_ms, :extra)""",
-            [
-                {
-                    "id": r.get("id"),
-                    "ts": r.get("ts"),
-                    "trace_id": r.get("trace_id"),
-                    "plan_id": r.get("plan_id"),
-                    "sub": r.get("sub"),
-                    "target_agent": r.get("target_agent"),
-                    "action": r.get("action"),
-                    "resource": r.get("resource"),
-                    "decision": r.get("decision"),
-                    "deny_reasons": json.dumps(r.get("deny_reasons", [])),
-                    "jti": r.get("jti"),
-                    "dpop_jti": r.get("dpop_jti"),
-                    "raw_prompt": r.get("raw_prompt"),
-                    "source_ip": r.get("source_ip"),
-                    "duration_ms": r.get("duration_ms"),
-                    "extra": json.dumps(r.get("extra", {})),
-                }
-                for r in rows
-            ],
-        )
-        await self._db.commit()
-        # Forward a copy to the central audit-api (non-blocking, best-effort)
+        # Forward first — DB failures must not block the audit-api pipeline
         asyncio.create_task(_forward_to_audit_api(rows))
+        try:
+            await self._db.executemany(
+                """INSERT OR IGNORE INTO audit_events
+                   (id, ts, trace_id, span_id, parent_span_id, plan_id, task_id,
+                    sub, target_agent, action, resource,
+                    decision, deny_reasons, jti, dpop_jti, raw_prompt, source_ip, duration_ms, extra)
+                   VALUES (:id, :ts, :trace_id, :span_id, :parent_span_id, :plan_id, :task_id,
+                           :sub, :target_agent, :action, :resource,
+                           :decision, :deny_reasons, :jti, :dpop_jti, :raw_prompt, :source_ip,
+                           :duration_ms, :extra)""",
+                [
+                    {
+                        "id": r.get("id"),
+                        "ts": r.get("ts"),
+                        "trace_id": r.get("trace_id"),
+                        "span_id": r.get("span_id"),
+                        "parent_span_id": r.get("parent_span_id"),
+                        "plan_id": r.get("plan_id"),
+                        "task_id": r.get("task_id"),
+                        "sub": r.get("sub"),
+                        "target_agent": r.get("target_agent"),
+                        "action": r.get("action"),
+                        "resource": r.get("resource"),
+                        "decision": r.get("decision"),
+                        "deny_reasons": json.dumps(r.get("deny_reasons", [])),
+                        "jti": r.get("jti"),
+                        "dpop_jti": r.get("dpop_jti"),
+                        "raw_prompt": r.get("raw_prompt"),
+                        "source_ip": r.get("source_ip"),
+                        "duration_ms": r.get("duration_ms"),
+                        "extra": json.dumps(r.get("extra", {})),
+                    }
+                    for r in rows
+                ],
+            )
+            await self._db.commit()
+        except Exception as exc:
+            logger.error("audit local DB write failed: %s", exc)
 
 
 audit_writer = AuditWriter()
@@ -139,9 +157,12 @@ def _to_audit_event(r: dict) -> dict:
         "event_type": "authz_decision",
         "timestamp": timestamp,
         "trace_id": r.get("trace_id"),
+        "span_id": r.get("span_id"),
+        "parent_span_id": r.get("parent_span_id"),
         "plan_id": r.get("plan_id"),
+        "task_id": r.get("task_id"),
         "decision": r.get("decision"),
-        "deny_reasons": json.loads(r.get("deny_reasons") or "[]"),
+        "deny_reasons": (lambda v: v if isinstance(v, list) else json.loads(v or "[]"))(r.get("deny_reasons", [])),
         "caller_sub": r.get("sub"),
         "callee_agent": r.get("target_agent"),
         "callee_action": r.get("action"),
@@ -149,7 +170,7 @@ def _to_audit_event(r: dict) -> dict:
         "caller_jti": r.get("jti"),
         "dpop_jkt": r.get("dpop_jti"),
         "raw_prompt": r.get("raw_prompt"),
-        "latency_ms": r.get("duration_ms"),
+        "latency_ms": int(r["duration_ms"]) if r.get("duration_ms") is not None else None,
         "extra": json.loads(r.get("extra") or "{}"),
     }
 
@@ -164,10 +185,16 @@ async def _forward_to_audit_api(rows: list[dict]) -> None:
         import httpx
         events = [_to_audit_event(r) for r in rows]
         async with httpx.AsyncClient(timeout=3.0) as client:
-            await client.post(
+            resp = await client.post(
                 f"{url}/audit/events",
                 json={"events": events},
                 headers={"Authorization": f"Bearer {token}"},
             )
+        if resp.status_code not in (200, 207):
+            logger.warning("audit-api forward rejected: status=%d body=%s", resp.status_code, resp.text[:200])
+        elif resp.status_code == 207:
+            body = resp.json()
+            if body.get("failed"):
+                logger.warning("audit-api partial failure: %s", body.get("errors"))
     except Exception as exc:
-        logger.debug("audit-api forward failed (non-fatal): %s", exc)
+        logger.warning("audit-api forward failed (non-fatal): %s", exc)

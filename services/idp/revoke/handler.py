@@ -49,7 +49,6 @@ async def revoke(request: Request, body: RevokeRequest):
     writer = get_audit_writer()
     await writer.write({
         "event_type": "token.revoke",
-        "decision": "allow",
         "payload": {
             "type": body.type,
             "value": body.value,

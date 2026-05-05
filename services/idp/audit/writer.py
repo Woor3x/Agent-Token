@@ -55,6 +55,9 @@ def _to_audit_event(event: dict) -> dict:
         "task_id": event.get("task_id"),
         "caller_sub": event.get("sub"),
         "caller_agent": event.get("act"),
+        "callee_agent": payload.get("callee"),
+        "callee_action": payload.get("action"),
+        "callee_resource": payload.get("resource"),
         "token_aud": event.get("aud"),
         "decision": event.get("decision"),
         "deny_reasons": deny_reasons,
@@ -79,7 +82,7 @@ async def _forward_to_audit_api(batch: list[dict]) -> None:
                 headers={"Authorization": f"Bearer {token}"},
             )
     except Exception as exc:
-        logger.debug("audit-api forward failed (non-fatal): %s", exc)
+        logger.warning("audit-api forward failed (non-fatal): %s", exc)
 
 
 class AuditWriter:

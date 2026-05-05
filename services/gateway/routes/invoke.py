@@ -75,20 +75,24 @@ async def invoke(request: Request):
 
     ctx = ForwardContext(
         method=request.method,
-        path=request.url.path,
+        path="/invoke",  # agents expose /invoke; gateway's own path is /a2a/invoke
         headers=forward_headers,
         trace_id=trace_id,
         span_id=getattr(request.state, "span_id", ""),
         baggage=",".join(baggage_parts),
     )
-    response = await call_upstream(target_agent, cfg, body_bytes, ctx)
-
-    duration = time.monotonic() * 1000 - start_ms
-    _emit_audit(request, claims, intent, target_agent, "allow", [], start_ms, duration)
-
-    response.headers["X-Policy-Version"] = settings.policy_version
-    response.headers["X-Trace-Id"] = trace_id
-    return response
+    # Emit allow audit regardless of upstream outcome: OPA approved, we must record it.
+    # If call_upstream raises (timeout, 5xx, network), the finally still fires.
+    response = None
+    try:
+        response = await call_upstream(target_agent, cfg, body_bytes, ctx)
+        return response
+    finally:
+        duration = time.monotonic() * 1000 - start_ms
+        _emit_audit(request, claims, intent, target_agent, "allow", [], start_ms, duration)
+        if response is not None:
+            response.headers["X-Policy-Version"] = settings.policy_version
+            response.headers["X-Trace-Id"] = trace_id
 
 
 def _emit_audit(
@@ -103,7 +107,10 @@ def _emit_audit(
 ) -> None:
     audit_writer.emit({
         "trace_id": getattr(request.state, "trace_id", ""),
+        "span_id": getattr(request.state, "span_id", ""),
+        "parent_span_id": getattr(request.state, "parent_span_id", None),
         "plan_id": claims.get("plan_id", ""),
+        "task_id": claims.get("task_id", ""),
         "sub": claims.get("sub", ""),
         "target_agent": target_agent,
         "action": intent.get("action", ""),

@@ -46,7 +46,6 @@ async def rotate_agent_key(agent_id: str, request: Request):
         "event_type": "agent.rotate_key",
         "sub": agent_id,
         "act": "rotate_key",
-        "decision": "allow",
         "payload": {
             "agent_id": agent_id,
             "old_kid": old_kid,

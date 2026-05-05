@@ -7,7 +7,7 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-_OPA_URL = f"{settings.opa_url}/allow"
+_OPA_URL = settings.opa_url
 
 
 async def check_authz(
@@ -34,7 +34,10 @@ async def check_authz(
             r.raise_for_status()
             result = r.json().get("result", {})
             allow = bool(result.get("allow", False))
-            reasons = result.get("reasons", [])
+            reasons = list(result.get("reasons", []))
+            if not allow:
+                logger.warning("opa deny reasons=%s target=%s action=%s",
+                               reasons, target_agent, intent.get("action"))
             return allow, reasons
     except Exception as exc:
         logger.warning("opa unavailable: %s — fail-closed", exc)

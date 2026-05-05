@@ -58,13 +58,8 @@ class AgentServer:
 
     def create_app(self) -> FastAPI:
         app = FastAPI(title=f"agent:{self.config.agent_id}")
-        # M1 IdP signs delegated tokens with bare agent id as `aud` (no
-        # `agent:` prefix). Mock/test mode keeps the prefixed form for
-        # backward compatibility with existing fixtures.
-        if os.environ.get("MOCK_AUTH", "false").lower() == "true":
-            expected_aud = f"agent:{self.config.agent_id}"
-        else:
-            expected_aud = self.config.agent_id
+        # IdP always signs delegated tokens with "agent:<id>" as aud.
+        expected_aud = f"agent:{self.config.agent_id}"
 
         @app.exception_handler(AuthnError)
         async def _authn_exc(_: Request, exc: AuthnError):

@@ -120,7 +120,6 @@ async def register_agent(request: Request, body: RegisterAgentRequest):
         "event_type": "agent.register",
         "sub": body.agent_id,
         "act": "register",
-        "decision": "allow",
         "payload": {
             "agent_id": body.agent_id,
             "role": body.role,

@@ -35,6 +35,7 @@ async def trace_middleware(request: Request, call_next):
 
     request.state.trace_id = trace_id
     request.state.span_id = span_id
+    request.state.parent_span_id = parent_span  # caller's span; None for root requests
     request.state.traceparent = traceparent
     request.state.baggage = baggage
 

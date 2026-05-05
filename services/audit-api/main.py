@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
@@ -101,6 +102,14 @@ app = FastAPI(
 )
 app.add_exception_handler(AuditAPIError, audit_error_handler)
 app.add_exception_handler(Exception, unhandled_error_handler)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Content-Type", "X-Request-ID"],
+)
 
 
 # ── POST /audit/events ────────────────────────────────────────────────────────

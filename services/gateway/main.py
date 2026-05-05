@@ -72,6 +72,15 @@ app = FastAPI(title="A2A Gateway", version="1.0.0", lifespan=lifespan)
 app.add_exception_handler(GatewayError, gateway_error_handler)
 app.add_exception_handler(Exception, unhandled_error_handler)
 
+# ── CORS ──────────────────────────────────────────────────────────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["X-Trace-Id", "X-Policy-Version", "X-Request-ID"],
+)
+
 # ── Middleware ────────────────────────────────────────────────────────────────
 # Starlette 注册顺序与执行顺序相反（后注册先执行），所以倒着写
 # 实际执行顺序：trace → authn → rate_limit → [路由] → rate_limit → authn → trace

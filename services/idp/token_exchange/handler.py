@@ -31,7 +31,7 @@ from audit.writer import get_audit_writer
 from config import settings
 from dpop.validator import verify_dpop_proof
 from errors import (
-    DelegationNotAllowed, EmptyEffectiveScope, InvalidRequest,
+    DelegationNotAllowed, EmptyEffectiveScope, IdPError, InvalidRequest,
 )
 from storage.redis import incr_with_window, sismember
 from token_exchange.assertion import verify_client_assertion
@@ -89,109 +89,133 @@ async def token_exchange(
     )
     dpop_jkt = dpop_claims.jkt
 
-    # Phase 4: Parse scope → (action, resource)
+    # Phase 4: Parse scope → (action, resource); extract target agent early for deny audit
     action, resource_value = parse_scope(scope)
-
-    # Phase 5: Delegation legitimacy check
     target_agent_id = extract_target_agent(audience)
-    callee_cap = get_agent_capability(target_agent_id)
-    if callee_cap is None:
-        raise InvalidRequest(f"Unknown callee agent: {target_agent_id}")
 
-    orchestrator_cap = get_agent_capability(orchestrator.agent_id)
-    if orchestrator_cap is None:
-        raise DelegationNotAllowed(f"Orchestrator {orchestrator.agent_id} has no capability definition")
+    try:
+        # Phase 5: Delegation legitimacy check
+        callee_cap = get_agent_capability(target_agent_id)
+        if callee_cap is None:
+            raise InvalidRequest(f"Unknown callee agent: {target_agent_id}")
 
-    check_orchestrator_can_invoke(orchestrator_cap, target_agent_id)
-    check_delegation(orchestrator.agent_id, target_agent_id, callee_cap)
+        orchestrator_cap = get_agent_capability(orchestrator.agent_id)
+        if orchestrator_cap is None:
+            raise DelegationNotAllowed(f"Orchestrator {orchestrator.agent_id} has no capability definition")
 
-    # Phase 6: Single executor check
-    check_executor(target_agent_id, action)
+        check_orchestrator_can_invoke(orchestrator_cap, target_agent_id)
+        check_delegation(orchestrator.agent_id, target_agent_id, callee_cap)
 
-    # Phase 7: Compute effective scope via intersection
-    callee_caps_raw = [{"action": c.action, "resource_pattern": c.resource_pattern} for c in callee_cap.capabilities]
-    user_perms = await load_permissions(user.sub)
-    effective_scope = intersect(callee_caps_raw, user_perms, [(action, resource_value)])
+        # Phase 6: Single executor check
+        check_executor(target_agent_id, action)
 
-    if not effective_scope:
-        raise EmptyEffectiveScope(
-            f"Effective scope is empty: action={action}, resource={resource_value}"
-        )
+        # Phase 7: Compute effective scope via intersection
+        callee_caps_raw = [{"action": c.action, "resource_pattern": c.resource_pattern} for c in callee_cap.capabilities]
+        user_perms = await load_permissions(user.sub)
+        effective_scope = intersect(callee_caps_raw, user_perms, [(action, resource_value)])
 
-    # Phase 8: Apply context constraints
-    ctx = {
-        "user": user.sub,
-        "client_ip": client_ip,
-        "orchestrator": orchestrator.agent_id,
-        "callee": target_agent_id,
-    }
-    effective_scope = await apply_context(effective_scope, ctx)
+        if not effective_scope:
+            raise EmptyEffectiveScope(
+                f"Effective scope is empty: action={action}, resource={resource_value}"
+            )
 
-    if not effective_scope:
-        raise EmptyEffectiveScope("Effective scope became empty after context evaluation")
-
-    # Phase 9: Rate limiting per agent+action
-    _cap_entry = next(
-        (c for c in callee_cap.capabilities if c.action == action), None
-    )
-    rate_limit = (
-        _cap_entry.constraints.get("max_calls_per_minute", 100)
-        if _cap_entry else 100
-    )
-    rate_key = f"rate:agent:{orchestrator.agent_id}:{action}"
-    count, allowed = await incr_with_window(rate_key, 60, rate_limit)
-    if not allowed:
-        from errors import RateLimited
-        raise RateLimited(
-            f"Agent {orchestrator.agent_id} rate limit for {action}: {count}/{rate_limit} per min"
-        )
-
-    # Phase 10: Sign delegated token and write audit
-    token_claims = {
-        "sub": user.sub,
-        "act": {"sub": orchestrator.agent_id},
-        # Fix B: use "agent:<id>" prefix per spec (§3 audience binding).
-        # OPA audience_match rule checks token.aud == "agent:{target_agent}".
-        "aud": f"agent:{target_agent_id}",
-        "scope": " ".join(effective_scope),
-        "plan_id": plan_id,
-        "task_id": task_id,
-        "trace_id": trace_id,
-        "parent_span": parent_span,
-        "purpose": purpose,
-        "resource": resource,
-    }
-    token_claims["cnf"] = {"jkt": dpop_jkt}
-
-    token_claims = {k: v for k, v in token_claims.items() if v is not None}
-
-    delegated_token, token_jti = sign_delegated_token(token_claims)
-
-    writer = get_audit_writer()
-    await writer.write({
-        "event_type": "token.issue",
-        "trace_id": trace_id,
-        "plan_id": plan_id,
-        "task_id": task_id,
-        "sub": user.sub,
-        "act": orchestrator.agent_id,
-        "aud": f"agent:{target_agent_id}",   # consistent with token.aud
-        "decision": "allow",
-        "payload": {
-            "token_jti": token_jti,
-            "scope": effective_scope,
-            "action": action,
-            "resource": resource_value,
+        # Phase 8: Apply context constraints
+        ctx = {
+            "user": user.sub,
+            "client_ip": client_ip,
             "orchestrator": orchestrator.agent_id,
             "callee": target_agent_id,
-            "dpop_bound": dpop_jkt is not None,
-        },
-    })
+        }
+        effective_scope = await apply_context(effective_scope, ctx)
 
-    return {
-        "access_token": delegated_token,
-        "token_type": "Bearer",
-        "expires_in": 120,
-        "scope": " ".join(effective_scope),
-        "issued_token_type": "urn:ietf:params:oauth:token-type:access_token",
-    }
+        if not effective_scope:
+            raise EmptyEffectiveScope("Effective scope became empty after context evaluation")
+
+        # Phase 9: Rate limiting per agent+action
+        _cap_entry = next(
+            (c for c in callee_cap.capabilities if c.action == action), None
+        )
+        rate_limit = (
+            _cap_entry.constraints.get("max_calls_per_minute", 100)
+            if _cap_entry else 100
+        )
+        rate_key = f"rate:agent:{orchestrator.agent_id}:{action}"
+        count, allowed = await incr_with_window(rate_key, 60, rate_limit)
+        if not allowed:
+            from errors import RateLimited
+            raise RateLimited(
+                f"Agent {orchestrator.agent_id} rate limit for {action}: {count}/{rate_limit} per min"
+            )
+
+        # Phase 10: Sign delegated token and write allow audit
+        token_claims = {
+            "sub": user.sub,
+            "act": {"sub": orchestrator.agent_id},
+            # Fix B: use "agent:<id>" prefix per spec (§3 audience binding).
+            # OPA audience_match rule checks token.aud == "agent:{target_agent}".
+            "aud": f"agent:{target_agent_id}",
+            "scope": " ".join(effective_scope),
+            "plan_id": plan_id,
+            "task_id": task_id,
+            "trace_id": trace_id,
+            "parent_span": parent_span,
+            "purpose": purpose,
+            "resource": resource,
+        }
+        token_claims["cnf"] = {"jkt": dpop_jkt}
+
+        token_claims = {k: v for k, v in token_claims.items() if v is not None}
+
+        delegated_token, token_jti = sign_delegated_token(token_claims)
+
+        writer = get_audit_writer()
+        await writer.write({
+            "event_type": "token.issue",
+            "trace_id": trace_id,
+            "plan_id": plan_id,
+            "task_id": task_id,
+            "sub": user.sub,
+            "act": orchestrator.agent_id,
+            "aud": f"agent:{target_agent_id}",   # consistent with token.aud
+            "payload": {
+                "token_jti": token_jti,
+                "scope": effective_scope,
+                "action": action,
+                "resource": resource_value,
+                "orchestrator": orchestrator.agent_id,
+                "callee": target_agent_id,
+                "dpop_bound": dpop_jkt is not None,
+            },
+        })
+
+        return {
+            "access_token": delegated_token,
+            "token_type": "Bearer",
+            "expires_in": 120,
+            "scope": " ".join(effective_scope),
+            "issued_token_type": "urn:ietf:params:oauth:token-type:access_token",
+        }
+
+    except IdPError as exc:
+        if exc.http_status >= 403:
+            writer = get_audit_writer()
+            await writer.write({
+                "event_type": "authz_decision",
+                "trace_id": trace_id,
+                "plan_id": plan_id,
+                "task_id": task_id,
+                "sub": user.sub,
+                "act": orchestrator.agent_id,
+                "aud": f"agent:{target_agent_id}",
+                "decision": "deny",
+                "deny_reasons": [exc.code],
+                "payload": {
+                    "error_code": exc.code,
+                    "error_message": exc.message,
+                    "action": action,
+                    "resource": resource_value,
+                    "orchestrator": orchestrator.agent_id,
+                    "callee": target_agent_id,
+                },
+            })
+        raise

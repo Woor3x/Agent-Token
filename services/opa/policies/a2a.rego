@@ -52,7 +52,7 @@ scope_covers if {
     # IdP signs scope as RFC6749 space-separated string; split before iterate.
     scope_arr := split(input.token.scope, " ")
     some s in scope_arr
-    glob.match(s, [":", "/", "*"], required)
+    glob.match(s, [":", "/"], required)
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
