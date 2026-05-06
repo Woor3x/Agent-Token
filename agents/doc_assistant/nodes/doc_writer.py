@@ -151,10 +151,13 @@ async def doc_writer_node(state: dict[str, Any]) -> dict[str, Any]:
     base = state["feishu_base"]
     oauth: FeishuOAuth = state.get("feishu_oauth") or FeishuOAuth(base=base)
     factory = state.get("client_factory") or (lambda: httpx.AsyncClient(timeout=10.0))
-    title = next(
-        (t.get("params", {}).get("title", "Auto Report")
+    # Prefer the synthesizer-derived title (LLM picks one from the user prompt);
+    # fall back to whatever the planner stuffed into the doc.write task params;
+    # final fallback keeps a sane Chinese default.
+    title = (state.get("doc_title") or "").strip() or next(
+        (t.get("params", {}).get("title", "执行报告")
          for t in state["dag"] if t.get("action") == "feishu.doc.write"),
-        "Auto Report",
+        "执行报告",
     )
     folder_token = state.get("feishu_folder_token") or os.environ.get(
         "FEISHU_DOCX_FOLDER_TOKEN", ""

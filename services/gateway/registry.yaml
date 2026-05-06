@@ -2,14 +2,17 @@ agents:
   doc_assistant:
     upstream: http://doc-assistant:8100
     transport: http
-    timeout_ms: 30000
+    # Full LangGraph chain: 2 LLM calls (planner + synthesizer) + Feishu reads
+    # + docx write. Real ARK thinking models can spend ~60s per call.
+    timeout_ms: 180000
     retry:
       max: 0
 
   data_agent:
     upstream: http://data-agent:8101
     transport: http
-    timeout_ms: 10000
+    # Real Feishu bitable read with pagination + 429 retry budget.
+    timeout_ms: 30000
     retry:
       max: 2
       backoff_ms: 200

@@ -15,8 +15,8 @@
         }
       ],
       "delegation": {
-        "accept_from": ["user"],
-        "max_depth": 1
+        "accept_from": ["user", "web_ui"],
+        "max_depth": 2
       }
     },
     "data_agent": {

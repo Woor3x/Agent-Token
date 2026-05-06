@@ -22,7 +22,9 @@
 
 ## 资源映射提示
 
-- "Q1 销售/sales/业绩" → app_token:bascn_alice/table:tbl_q1
+- "Q1 销售/sales/业绩/任务/进度/明细" 等需要读多维表的请求 → 直接使用 {{BITABLE_RESOURCE}}（部署默认表，禁止猜其他 app_token）
+- "团队/成员/sales team/部门" → resource 用 {{CONTACT_HINT}}
+- "日程/会议/calendar" → resource 用 {{CALENDAR_HINT}}
 - "团队/成员/sales team" → department:sales
 - "行业调研/research/zero trust" → web.search params.query=用户原句
 

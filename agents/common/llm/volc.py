@@ -109,7 +109,7 @@ class VolcArkProvider(LLMProvider):
         temperature: float = 0.2,
         max_tokens: int = 1024,
         json_mode: bool = False,
-        timeout: float = 30.0,
+        timeout: float = 90.0,
         model: str | None = None,
         trace_id: str | None = None,
         top_p: float | None = None,

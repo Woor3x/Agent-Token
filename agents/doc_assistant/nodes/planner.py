@@ -14,6 +14,7 @@ Two paths:
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -56,6 +57,27 @@ def validate_dag(dag: list[dict]) -> None:
                 raise ValueError(f"dep {d} of {tid} not declared before")
 
 
+# ---- env-driven default resources -------------------------------------------
+# Real Feishu deployments override these via env so the planner stops handing
+# out mock identifiers (`bascn_alice/tbl_q1`) that 91402 NOTEXIST upstream.
+
+
+def _default_bitable_resource() -> str:
+    app = os.environ.get("FEISHU_BITABLE_APP_TOKEN") or "bascn_alice"
+    tbl = os.environ.get("FEISHU_BITABLE_TABLE_ID") or "tbl_q1"
+    return f"app_token:{app}/table:{tbl}"
+
+
+def _default_contact_dept() -> str | None:
+    """None → planner skips contact tasks (no real dept_id configured)."""
+    return os.environ.get("FEISHU_CONTACT_DEPT_ID") or None
+
+
+def _default_calendar_id() -> str | None:
+    """None → planner skips calendar tasks (no real calendar_id configured)."""
+    return os.environ.get("FEISHU_CALENDAR_ID") or None
+
+
 # ---- rule-based fallback ----------------------------------------------------
 
 
@@ -66,18 +88,20 @@ def _rule_plan(prompt: str) -> list[dict]:
         tasks.append({
             "id": "t1", "agent": "data_agent",
             "action": "feishu.bitable.read",
-            "resource": "app_token:bascn_alice/table:tbl_q1",
+            "resource": _default_bitable_resource(),
             "params": {"page_size": 100},
             "deps": [],
         })
     if "team" in p or "member" in p or "sales team" in p or "成员" in p:
-        tasks.append({
-            "id": f"t{len(tasks)+1}", "agent": "data_agent",
-            "action": "feishu.contact.read",
-            "resource": "department:sales",
-            "params": {},
-            "deps": [],
-        })
+        dept = _default_contact_dept()
+        if dept:
+            tasks.append({
+                "id": f"t{len(tasks)+1}", "agent": "data_agent",
+                "action": "feishu.contact.read",
+                "resource": f"department:{dept}",
+                "params": {},
+                "deps": [],
+            })
     if "industry" in p or "research" in p or "zero trust" in p or "行业" in p or "调研" in p:
         tasks.append({
             "id": f"t{len(tasks)+1}", "agent": "web_agent",
@@ -110,12 +134,26 @@ def _rule_plan(prompt: str) -> list[dict]:
 
 def _load_system_prompt() -> str:
     try:
-        return _PROMPT_PATH.read_text(encoding="utf-8")
+        raw = _PROMPT_PATH.read_text(encoding="utf-8")
     except OSError:
         return (
             "你是任务规划器，输出 JSON {tasks:[...]}, action 取自固定枚举, "
             "最后一步必须为 doc_assistant.feishu.doc.write。"
         )
+    # Inject env-derived defaults so the LLM stops parroting mock examples
+    # (`bascn_alice`, `department:sales`, …) into real Feishu calls.
+    raw = raw.replace("{{BITABLE_RESOURCE}}", _default_bitable_resource())
+    dept = _default_contact_dept()
+    cal = _default_calendar_id()
+    raw = raw.replace(
+        "{{CONTACT_HINT}}",
+        f"department:{dept}" if dept else "（未配置 FEISHU_CONTACT_DEPT_ID — 禁止生成 feishu.contact.read 任务）",
+    )
+    raw = raw.replace(
+        "{{CALENDAR_HINT}}",
+        f"calendar:{cal}" if cal else "（未配置 FEISHU_CALENDAR_ID — 禁止生成 feishu.calendar.read 任务）",
+    )
+    return raw
 
 
 def _extract_json(raw: str) -> dict:

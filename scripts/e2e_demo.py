@@ -140,6 +140,7 @@ async def main() -> None:
             gateway_url=GATEWAY_URL,
             kid=kid,
             private_key_pem=pem,
+            timeout=120.0,
         ) as agent:
             trace_id = uuid.uuid4().hex
             result = await agent.invoke(
