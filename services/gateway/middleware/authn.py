@@ -56,7 +56,6 @@ async def authn_middleware(request: Request, call_next):
         if not claims.get("one_time"):
             raise authn_invalid("not a one-time token")
 
-        # 4 维撤销查询，全部直接查 Redis，不经过 Bloom 过滤器
         redis: aioredis.Redis = request.app.state.redis
         jti = claims["jti"]
         sub = claims.get("sub", "")

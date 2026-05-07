@@ -254,12 +254,13 @@ services:
       context: ./services/web
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_IDP_URL: http://localhost:8000
-        NEXT_PUBLIC_DOC_ASSISTANT_URL: http://localhost:8100
-        NEXT_PUBLIC_AUDIT_URL: http://localhost:8090
-        NEXT_PUBLIC_FEISHU_URL: http://localhost:9000
         NEXT_PUBLIC_OIDC_CLIENT_ID: web-ui
         NEXT_PUBLIC_ADMIN_TOKEN: admin-secret-token
+    environment:
+      IDP_URL:           http://idp:8000
+      DOC_ASSISTANT_URL: http://doc-assistant:8100
+      AUDIT_URL:         http://audit-api:8090
+      FEISHU_URL:        http://feishu-mock:9000
     ports: ["3000:3000"]
     depends_on:
       idp:

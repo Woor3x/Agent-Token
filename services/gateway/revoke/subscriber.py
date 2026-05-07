@@ -1,4 +1,5 @@
 """Redis Pub/Sub subscriber — listens for revocation broadcasts from IdP and updates Bloom filter."""
+# 已废弃, 仅作保留
 import asyncio
 import json
 import logging

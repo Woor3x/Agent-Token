@@ -42,18 +42,6 @@ export default function LoginPage() {
               跳转至 IdP 登录
             </button>
 
-            {/* Divider */}
-            <div className="border-t border-slate-100 pt-4">
-              <p className="text-xs text-slate-400 mb-2 font-medium">演示账号</p>
-              <div className="bg-slate-50 rounded-lg px-3 py-2.5 flex items-center justify-between">
-                <div className="flex items-center gap-3 text-xs font-mono">
-                  <span className="text-slate-600">alice</span>
-                  <span className="text-slate-300">/</span>
-                  <span className="text-slate-500">alice123</span>
-                </div>
-                <span className="text-xs text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded font-medium">orchestrator</span>
-              </div>
-            </div>
           </div>
         </div>
 

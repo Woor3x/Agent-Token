@@ -6,7 +6,8 @@ import { getAccessToken, getUserSub, logout } from "@/lib/auth";
 import { useEffect, useState } from "react";
 
 const NAV = [
-  { href: "/chat", label: "聊天" },
+  { href: "/chat",  label: "聊天" },
+  { href: "/docs",  label: "文档" },
   { href: "/audit", label: "审计" },
   { href: "/revoke", label: "撤销" },
   { href: "/admin/agents", label: "Agents" },

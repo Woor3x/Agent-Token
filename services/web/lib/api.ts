@@ -1,11 +1,11 @@
 import { getAccessToken } from "./auth";
 import type { AuditEvent, AgentInfo, PlanResult, TraceResult, AuditStats, ChatResponse } from "@/types";
 
-const DOC_ASSISTANT = process.env.NEXT_PUBLIC_DOC_ASSISTANT_URL!;
-const AUDIT = process.env.NEXT_PUBLIC_AUDIT_URL!;
-const IDP = process.env.NEXT_PUBLIC_IDP_URL!;
-const ADMIN_TOKEN = process.env.NEXT_PUBLIC_ADMIN_TOKEN!;
-const FEISHU = process.env.NEXT_PUBLIC_FEISHU_URL!;
+const DOC_ASSISTANT = "/api/proxy/doc-assistant";
+const AUDIT        = "/api/proxy/audit";
+const IDP          = "/api/proxy/idp";
+const FEISHU       = "/api/proxy/feishu";
+const ADMIN_TOKEN  = process.env.NEXT_PUBLIC_ADMIN_TOKEN!;
 
 function userBearerHeaders(): HeadersInit {
   const t = getAccessToken();

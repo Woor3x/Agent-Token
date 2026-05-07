@@ -1,29 +1,21 @@
-const IDP = process.env.NEXT_PUBLIC_IDP_URL!;
 const CLIENT_ID = process.env.NEXT_PUBLIC_OIDC_CLIENT_ID!;
-const REDIRECT_URI = `${typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"}/callback`;
-
-function b64url(buf: Uint8Array): string {
-  return btoa(String.fromCharCode(...Array.from(buf)))
-    .replace(/=/g, "")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_");
-}
 
 export async function startLogin() {
-  const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
-  const challenge = b64url(new Uint8Array(digest));
+  // Generate PKCE pair server-side — crypto.subtle is unavailable over plain HTTP
+  const pkce = await fetch("/api/auth/pkce");
+  if (!pkce.ok) throw new Error("PKCE generation failed");
+  const { verifier, challenge, state } = await pkce.json();
 
   sessionStorage.setItem("pkce_verifier", verifier);
 
-  const url = new URL(`${IDP}/oidc/authorize`);
+  // Navigate to our server-side proxy — browser never contacts IdP directly
+  const url = new URL("/api/auth/authorize", window.location.origin);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("client_id", CLIENT_ID);
-  url.searchParams.set("redirect_uri", REDIRECT_URI);
   url.searchParams.set("scope", "openid profile agent:invoke");
   url.searchParams.set("code_challenge", challenge);
   url.searchParams.set("code_challenge_method", "S256");
-  url.searchParams.set("state", crypto.randomUUID());
+  url.searchParams.set("state", state);
 
   window.location.href = url.toString();
 }
@@ -37,10 +29,9 @@ export async function finishLogin(code: string): Promise<void> {
     code,
     code_verifier: verifier,
     client_id: CLIENT_ID,
-    redirect_uri: REDIRECT_URI,
   });
 
-  const resp = await fetch(`${IDP}/oidc/token`, {
+  const resp = await fetch("/api/auth/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
