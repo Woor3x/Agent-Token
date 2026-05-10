@@ -131,6 +131,7 @@ def _emit_audit(
         "deny_reasons": reasons,
         "jti": claims.get("jti", ""),
         "dpop_jti": getattr(request.state, "dpop_claims", {}).get("jti", ""),
+        "dpop_jkt": claims.get("cnf", {}).get("jkt", ""),
         "source_ip": request.client.host if request.client else "",
         "duration_ms": duration,
     })

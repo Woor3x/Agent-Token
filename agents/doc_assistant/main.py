@@ -161,6 +161,7 @@ def build_app(
         state: dict[str, Any] = {
             "user_prompt": prompt,
             "user_token": token_str,
+            "user_sub": user_sub,
             "trace_id": trace_id,
             "plan_id": plan_id,
             "sdk": sdk,

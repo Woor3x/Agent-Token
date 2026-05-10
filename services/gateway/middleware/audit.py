@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS audit_events (
     deny_reasons    TEXT,
     jti             TEXT,
     dpop_jti        TEXT,
+    dpop_jkt        TEXT,
     raw_prompt      TEXT,
     source_ip       TEXT,
     duration_ms     REAL,
@@ -47,7 +48,7 @@ class AuditWriter:
         self._db = await aiosqlite.connect(settings.audit_db_path)
         await self._db.execute(_DDL)
         # Migrate: add columns introduced after initial schema was deployed
-        for col_def in ("span_id TEXT", "parent_span_id TEXT", "task_id TEXT"):
+        for col_def in ("span_id TEXT", "parent_span_id TEXT", "task_id TEXT", "dpop_jkt TEXT"):
             col_name = col_def.split()[0]
             try:
                 await self._db.execute(f"ALTER TABLE audit_events ADD COLUMN {col_def}")
@@ -105,10 +106,10 @@ class AuditWriter:
                 """INSERT OR IGNORE INTO audit_events
                    (id, ts, trace_id, span_id, parent_span_id, plan_id, task_id,
                     sub, target_agent, action, resource,
-                    decision, deny_reasons, jti, dpop_jti, raw_prompt, source_ip, duration_ms, extra)
+                    decision, deny_reasons, jti, dpop_jti, dpop_jkt, raw_prompt, source_ip, duration_ms, extra)
                    VALUES (:id, :ts, :trace_id, :span_id, :parent_span_id, :plan_id, :task_id,
                            :sub, :target_agent, :action, :resource,
-                           :decision, :deny_reasons, :jti, :dpop_jti, :raw_prompt, :source_ip,
+                           :decision, :deny_reasons, :jti, :dpop_jti, :dpop_jkt, :raw_prompt, :source_ip,
                            :duration_ms, :extra)""",
                 [
                     {
@@ -127,6 +128,7 @@ class AuditWriter:
                         "deny_reasons": json.dumps(r.get("deny_reasons", [])),
                         "jti": r.get("jti"),
                         "dpop_jti": r.get("dpop_jti"),
+                        "dpop_jkt": r.get("dpop_jkt"),
                         "raw_prompt": r.get("raw_prompt"),
                         "source_ip": r.get("source_ip"),
                         "duration_ms": r.get("duration_ms"),
@@ -168,7 +170,7 @@ def _to_audit_event(r: dict) -> dict:
         "callee_action": r.get("action"),
         "callee_resource": r.get("resource"),
         "caller_jti": r.get("jti"),
-        "dpop_jkt": r.get("dpop_jti"),
+        "dpop_jkt": r.get("dpop_jkt"),
         "raw_prompt": r.get("raw_prompt"),
         "latency_ms": int(r["duration_ms"]) if r.get("duration_ms") is not None else None,
         "extra": json.loads(r.get("extra") or "{}"),
