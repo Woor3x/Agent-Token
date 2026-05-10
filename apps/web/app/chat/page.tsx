@@ -90,17 +90,47 @@ export default function ChatPage() {
     return "?";
   }
 
-  // Build a clickable Feishu URL for one selection. Bitable apps live under
-  // /base/<app_token>?table=<table_id>; whole-app picks drop the table param.
-  // Docx documents live under /docx/<document_id>. Falls back to "#" when the
-  // selection is malformed so React doesn't choke on undefined href.
+  // Strip any existing query/fragment from a Feishu URL so we can re-append
+  // ``?table=...&from=from_copylink`` cleanly. Backend drive listings come
+  // back without query params, but we still defend against future shape
+  // changes.
+  function _stripQuery(u: string): string {
+    const i = u.indexOf("?");
+    const j = u.indexOf("#");
+    const cut = [i, j].filter((x) => x >= 0).reduce((a, b) => Math.min(a, b), u.length);
+    return u.slice(0, cut);
+  }
+
+  // Ensure ``?from=from_copylink`` is on the URL — without it, Feishu wraps
+  // the deep-link in a user-verification challenge that breaks anonymous
+  // / cross-tenant viewers. ``key=val`` already present is left untouched.
+  function _withCopyLink(u: string): string {
+    if (!u || u === "#") return u;
+    if (u.includes("from=from_copylink")) return u;
+    return u + (u.includes("?") ? "&" : "?") + "from=from_copylink";
+  }
+
+  // Build a clickable Feishu URL for one selection. Prefer the upstream URL
+  // captured at pick time (tenant subdomain, e.g.
+  // https://jcneyh7qlo8i.feishu.cn/base/<token>?from=from_copylink) — the
+  // bare https://feishu.cn/... shape triggers Feishu's user-verification flow.
+  // For sub-table picks we splice in ?table=<id>&from=from_copylink.
   function selUrl(s: BitableSelection): string {
+    if (s.url) {
+      if (s.kind === "bitable" && s.table_id) {
+        return `${_stripQuery(s.url)}?table=${s.table_id}&from=from_copylink`;
+      }
+      return _withCopyLink(s.url);
+    }
+    // Last-resort fallback (kept for legacy state without url field).
     if (s.kind === "docx" && s.document_id) {
-      return `https://feishu.cn/docx/${s.document_id}`;
+      return `https://feishu.cn/docx/${s.document_id}?from=from_copylink`;
     }
     if (s.app_token) {
       const base = `https://feishu.cn/base/${s.app_token}`;
-      return s.table_id ? `${base}?table=${s.table_id}` : base;
+      return s.table_id
+        ? `${base}?table=${s.table_id}&from=from_copylink`
+        : `${base}?from=from_copylink`;
     }
     return "#";
   }
@@ -108,8 +138,13 @@ export default function ChatPage() {
   // Same idea for raw picker rows — folder rows have no public deep link, so
   // we only emit a URL for files the user can actually open in Feishu.
   function fileUrl(f: DriveFile): string | null {
-    if (f.type === "bitable") return `https://feishu.cn/base/${f.token}`;
-    if (f.type === "docx") return `https://feishu.cn/docx/${f.token}`;
+    // Backend drive.list returns the tenant-subdomain URL straight from the
+    // Feishu API. Folders aren't deep-linkable so we leave them alone; for
+    // base/docx we splice in ``?from=from_copylink`` so anonymous viewers
+    // bypass Feishu's user-verification gate.
+    if (f.url) return f.type === "folder" ? f.url : _withCopyLink(f.url);
+    if (f.type === "bitable") return `https://feishu.cn/base/${f.token}?from=from_copylink`;
+    if (f.type === "docx") return `https://feishu.cn/docx/${f.token}?from=from_copylink`;
     if (f.type === "folder") return `https://feishu.cn/drive/folder/${f.token}`;
     return null;
   }
@@ -181,7 +216,7 @@ export default function ChatPage() {
   // Docx: nothing to drill into; add it to the selection list directly.
   async function pickFile(f: DriveFile) {
     if (f.type === "docx") {
-      addSel({ kind: "docx", document_id: f.token, name: f.name });
+      addSel({ kind: "docx", document_id: f.token, name: f.name, url: f.url });
       return;
     }
     setPickedFile(f);
@@ -196,7 +231,7 @@ export default function ChatPage() {
 
   // "Select the whole bitable" — analyse all tables under one app_token.
   function pickWholeBitable(f: DriveFile) {
-    addSel({ kind: "bitable", app_token: f.token, name: f.name });
+    addSel({ kind: "bitable", app_token: f.token, name: f.name, url: f.url });
   }
 
   function pickTable(t: BitableTable) {
@@ -206,6 +241,7 @@ export default function ChatPage() {
       app_token: pickedFile.token,
       table_id: t.table_id,
       name: `${pickedFile.name} / ${t.name}`,
+      url: pickedFile.url,
     });
     // Drop back to the file list so the user can pick another source if they
     // want — closing only happens via the explicit 完成/× buttons.
@@ -563,7 +599,11 @@ export default function ChatPage() {
                           {selected && <span className="text-emerald-600 text-xs">✓ 已选</span>}
                         </button>
                         <a
-                          href={`https://feishu.cn/base/${pickedFile.token}?table=${t.table_id}`}
+                          href={
+                            pickedFile.url
+                              ? `${_stripQuery(pickedFile.url)}?table=${t.table_id}&from=from_copylink`
+                              : `https://feishu.cn/base/${pickedFile.token}?table=${t.table_id}&from=from_copylink`
+                          }
                           target="_blank"
                           rel="noreferrer"
                           title="在飞书中打开"

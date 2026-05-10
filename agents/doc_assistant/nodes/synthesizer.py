@@ -245,35 +245,61 @@ def _users_to_block(users: list[dict]) -> list[dict]:
     return [{"block_type": "text", "text": "\n".join(lines) or "(暂无成员)"}]
 
 
-def _md_escape_inline(s: str) -> str:
-    """Defang markdown control chars that would otherwise be parsed as syntax.
+# Embedded markdown links inside a snippet (Google News etc. dump their nav
+# bar into the search snippet, which arrives as ``[新闻](url). [图片](url)...``).
+# Strip the wrapper so only the visible label remains — otherwise the rendered
+# snippet looks like raw markdown source.
+_INLINE_LINK_RE = re.compile(r"\[([^\]\n]{0,80})\]\(\s*[^)\s]{1,300}\s*\)")
+_INLINE_IMG_RE = re.compile(r"!\[([^\]\n]{0,80})\]\(\s*[^)\s]{1,300}\s*\)")
 
-    Search snippets routinely include literal ``[label](url)`` strings copied
-    from the source page; left unescaped, GFM renders them as nested links
-    inside our ``- [title](url) — snippet`` row, producing a soup of tiny
-    "新闻" / "图片" links instead of the snippet body. Escape the brackets
-    and pipes (the latter would also break markdown tables) while leaving
-    URLs alone — they'll render as plain text at worst.
+
+def _clean_snippet(s: str, max_len: int = 220) -> str:
+    """Normalize a search-result snippet into safe inline markdown.
+
+    1. Strip embedded ``[label](url)`` / ``![alt](url)`` patterns down to the
+       label so they don't render as nested links inside our outer
+       ``- [title](url) — snippet`` row.
+    2. Collapse whitespace runs (incl. newlines) into single spaces.
+    3. Defang remaining structural chars (``|`` for tables, leading ``#`` /
+       ``>`` / list markers) so the snippet stays inline.
+    4. Truncate to ``max_len`` so a single hit can't dominate the layout.
     """
     if not s:
         return ""
-    out: list[str] = []
-    for ch in s:
-        if ch in "[]|`*_<>":
-            out.append("\\" + ch)
-        elif ch == "\n":
-            out.append(" ")
-        else:
-            out.append(ch)
-    return "".join(out)
+    s = _INLINE_IMG_RE.sub(r"\1", s)
+    s = _INLINE_LINK_RE.sub(r"\1", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    # Pipe would split markdown tables; backticks would open a code span and
+    # eat trailing content. Escape both. Brackets are safe now that link
+    # syntax is gone.
+    s = s.replace("|", "\\|").replace("`", "\\`")
+    if len(s) > max_len:
+        s = s[: max_len - 1].rstrip() + "…"
+    return s
+
+
+def _clean_title(s: str, max_len: int = 80) -> str:
+    """Snippet rules minus the link-stripping (titles rarely contain links)."""
+    if not s:
+        return "?"
+    s = re.sub(r"\s+", " ", s).strip()
+    s = s.replace("[", "(").replace("]", ")").replace("|", "/").replace("`", "'")
+    if len(s) > max_len:
+        s = s[: max_len - 1].rstrip() + "…"
+    return s
 
 
 def _search_to_block(hits: list[dict]) -> list[dict]:
-    lines = [
-        f"- [{_md_escape_inline(h.get('title', '?'))}]({h.get('url', '')}) — "
-        f"{_md_escape_inline(h.get('snippet', ''))}"
-        for h in hits
-    ]
+    lines: list[str] = []
+    for h in hits:
+        title = _clean_title(h.get("title", "?"))
+        url = (h.get("url") or "").strip()
+        snippet = _clean_snippet(h.get("snippet", ""))
+        if url:
+            head = f"- [{title}]({url})"
+        else:
+            head = f"- {title}"
+        lines.append(f"{head} — {snippet}" if snippet else head)
     return [{"block_type": "text", "text": "\n".join(lines) or "(无检索结果)"}]
 
 

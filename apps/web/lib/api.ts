@@ -33,6 +33,11 @@ export interface BitableSelection {
   table_id?: string;
   document_id?: string;
   name?: string;
+  // Upstream Feishu URL (tenant subdomain, e.g.
+  // https://jcneyh7qlo8i.feishu.cn/base/<token>...). Captured at pick time
+  // from DriveFile.url so the chip's ↗ jumps to the real tenant URL —
+  // a hardcoded https://feishu.cn/... triggers user-verification.
+  url?: string;
 }
 
 export async function sendChat(
