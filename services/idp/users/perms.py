@@ -14,8 +14,11 @@ async def verify_password(user_id: str, password: str) -> bool:
     user = await db.get_user(user_id)
     if not user or not user.get("password_hash"):
         return False
-    from passlib.hash import bcrypt
+    import bcrypt as bcrypt_lib
     try:
-        return bcrypt.verify(password, user["password_hash"])
+        return bcrypt_lib.checkpw(
+            password.encode("utf-8"),
+            user["password_hash"].encode("utf-8"),
+        )
     except Exception:
         return False

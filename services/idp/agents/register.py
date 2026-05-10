@@ -102,7 +102,7 @@ async def register_agent(request: Request, body: RegisterAgentRequest):
     kid, private_pem, public_jwk = _generate_agent_keypair(body.agent_id, version)
 
     now = datetime.now(timezone.utc).isoformat()
-    await db.insert_agent({
+    await db.upsert_agent({
         "agent_id": body.agent_id,
         "role": body.role,
         "kid": kid,

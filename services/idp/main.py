@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
@@ -88,6 +89,24 @@ async def idp_error_handler(request: Request, exc: IdPError):
             "error": {
                 "code": exc.code,
                 "message": exc.message,
+                "trace_id": request_id,
+                "policy_version": settings.policy_version,
+            }
+        },
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError):
+    request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
+    first = exc.errors()[0] if exc.errors() else {}
+    msg = first.get("msg", str(exc))
+    return JSONResponse(
+        status_code=400,
+        content={
+            "error": {
+                "code": "invalid_request",
+                "message": f"Request validation failed: {msg}",
                 "trace_id": request_id,
                 "policy_version": settings.policy_version,
             }

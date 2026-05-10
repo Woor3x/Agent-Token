@@ -79,6 +79,33 @@ async def insert_agent(agent: dict) -> None:
     await db.commit()
 
 
+async def upsert_agent(agent: dict) -> None:
+    db = await get_db()
+    await db.execute(
+        """INSERT INTO agents
+               (agent_id, role, kid, public_jwk, alg, status,
+                display_name, contact, registered_at, registered_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(agent_id) DO UPDATE SET
+               role          = excluded.role,
+               kid           = excluded.kid,
+               public_jwk    = excluded.public_jwk,
+               alg           = excluded.alg,
+               status        = excluded.status,
+               display_name  = excluded.display_name,
+               contact       = excluded.contact,
+               registered_at = excluded.registered_at,
+               registered_by = excluded.registered_by""",
+        (
+            agent["agent_id"], agent["role"], agent["kid"],
+            agent["public_jwk"], agent.get("alg", "RS256"),
+            agent.get("status", "active"), agent.get("display_name"),
+            agent.get("contact"), agent["registered_at"], agent.get("registered_by"),
+        ),
+    )
+    await db.commit()
+
+
 async def update_agent_kid(agent_id: str, kid: str, public_jwk: str) -> None:
     db = await get_db()
     await db.execute(

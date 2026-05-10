@@ -2,8 +2,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+import bcrypt as bcrypt_lib
 import yaml
-from passlib.hash import bcrypt
 from pydantic import BaseModel
 
 from storage import sqlite as db
@@ -34,7 +34,9 @@ async def load_users(users_dir: str) -> None:
         if user.password:
             # bcrypt 只处理前 72 字节；超出部分静默截断符合规范，
             # 同时避免 passlib 部分版本因 truncate_error=True 抛 ValueError。
-            password_hash = bcrypt.hash(user.password[:72])
+            password_hash = bcrypt_lib.hashpw(
+                user.password[:72].encode("utf-8"), bcrypt_lib.gensalt()
+            ).decode("utf-8")
 
         permissions = [p.model_dump() for p in user.permissions]
         now = datetime.now(timezone.utc).isoformat()
