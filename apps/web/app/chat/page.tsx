@@ -90,21 +90,31 @@ export default function ChatPage() {
     return "?";
   }
 
+  // Build a clickable Feishu URL for one selection. Bitable apps live under
+  // /base/<app_token>?table=<table_id>; whole-app picks drop the table param.
+  // Docx documents live under /docx/<document_id>. Falls back to "#" when the
+  // selection is malformed so React doesn't choke on undefined href.
+  function selUrl(s: BitableSelection): string {
+    if (s.kind === "docx" && s.document_id) {
+      return `https://feishu.cn/docx/${s.document_id}`;
+    }
+    if (s.app_token) {
+      const base = `https://feishu.cn/base/${s.app_token}`;
+      return s.table_id ? `${base}?table=${s.table_id}` : base;
+    }
+    return "#";
+  }
+
   async function submit() {
     const prompt = input.trim();
     if (!prompt || loading) return;
     setInput("");
-    const sourcesLine =
-      bitables.length > 0
-        ? bitables.map((b) => `📊 ${selLabel(b)}`).join("\n") + "\n"
-        : "";
-    addMessage({ role: "user", text: `${sourcesLine}${prompt}` });
+    const picked = bitables.length > 0 ? [...bitables] : undefined;
+    addMessage({ role: "user", text: prompt, sources: picked });
     setTaskStatus("running");
 
     try {
-      const resp = await sendChat(prompt, {
-        bitables: bitables.length > 0 ? bitables : undefined,
-      });
+      const resp = await sendChat(prompt, { bitables: picked });
       addMessage({ role: "agent", text: extractContent(resp), response: resp });
       setTaskStatus("idle");
     } catch (e) {
@@ -233,7 +243,26 @@ export default function ChatPage() {
               {msg.error ? (
                 <div><span className="font-medium">错误：</span>{msg.error}</div>
               ) : msg.role === "user" ? (
-                <div className="whitespace-pre-wrap">{msg.text}</div>
+                <div>
+                  {msg.sources && msg.sources.length > 0 && (
+                    <div className="mb-2 flex flex-col gap-1 text-xs">
+                      {msg.sources.map((s, si) => (
+                        <a
+                          key={si}
+                          href={selUrl(s)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-blue-100 hover:text-white underline decoration-blue-300/60 hover:decoration-white break-all"
+                        >
+                          <span aria-hidden>📊</span>
+                          <span>{selLabel(s)}</span>
+                          <span aria-hidden className="opacity-70">↗</span>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                  <div className="whitespace-pre-wrap">{msg.text}</div>
+                </div>
               ) : (
                 <>
                   {/* Doc content */}

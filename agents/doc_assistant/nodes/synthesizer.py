@@ -212,13 +212,32 @@ def _rows_to_table(records: list[dict]) -> list[dict]:
             if k not in seen:
                 seen.add(k)
                 keys.append(k)
-    header = " | ".join(keys)
-    lines = [header, " | ".join("---" for _ in keys)]
+
+    def _row(cells: list[str]) -> str:
+        # Canonical GFM table row: leading + trailing pipe so remark-gfm parses
+        # reliably even when the preceding paragraph lacks a blank-line gap.
+        return "| " + " | ".join(cells) + " |"
+
+    def _clean(v: Any) -> str:
+        # Cell values must not contain raw pipes (would split the row) or
+        # newlines (would terminate the table mid-stream). ``_fmt_cell`` already
+        # collapses string whitespace; defend against list/dict shapes that
+        # round-tripped through ``str(...)``.
+        s = _fmt_cell(v)
+        return s.replace("|", "\\|").replace("\n", " ").strip()
+
+    header = _row(keys)
+    divider = _row(["---"] * len(keys))
+    lines = [header, divider]
     for r in records:
         f = r.get("fields") or {}
-        # Escape stray pipes so a cell value can't shatter the markdown row.
-        lines.append(" | ".join(_fmt_cell(f.get(k, "")).replace("|", "\\|") for k in keys))
-    return [{"block_type": "text", "text": "\n".join(lines)}]
+        lines.append(_row([_clean(f.get(k, "")) for k in keys]))
+    # Wrap with blank lines on both ends. ``blocksToMarkdown`` already joins
+    # with "\n\n", but an extra leading/trailing newline guards against
+    # adjacent text blocks that get merged into the same paragraph by future
+    # changes — markdown tables silently degrade to plain text without a
+    # blank line above them.
+    return [{"block_type": "text", "text": "\n" + "\n".join(lines) + "\n"}]
 
 
 def _users_to_block(users: list[dict]) -> list[dict]:
