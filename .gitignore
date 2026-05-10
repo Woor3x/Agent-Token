@@ -110,6 +110,3 @@ keys/
 
 # Local override of compose
 docker-compose.override.yml
-
-# Personal drafts / notes — never push
-personal/

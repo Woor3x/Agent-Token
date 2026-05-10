@@ -17,7 +17,7 @@ from agent_token_sdk import AgentClient, AgentServer
 from agents.data_agent.feishu.oauth import FeishuOAuth
 from agents.data_agent.handler import DataAgentHandler
 from agents.web_agent.handler import WebAgentHandler
-from services.feishu_mock.main import app as feishu_mock_app
+from tests._fixtures.feishu_mock.main import app as feishu_mock_app
 
 from .helpers import build_mock_gateway, build_mock_idp, build_sdk_http, mint_user_token
 

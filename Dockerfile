@@ -1,8 +1,8 @@
-## Agent + service base image.
+## Agent base image.
 ##
 ## docker-compose.yml builds this once (image: agent-token/agent-base) and
-## reuses it for feishu-mock, gateway-mock, doc-assistant, data-agent, web-agent.
-## The IdP is built from its own services/idp/Dockerfile (M1).
+## reuses it for doc-assistant, data-agent, web-agent.
+## IdP / Gateway / Audit-API have their own Dockerfile under infra/.
 
 FROM python:3.12-slim AS base
 
@@ -26,7 +26,6 @@ RUN pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
 
 COPY agents/ ./agents/
 COPY sdk/ ./sdk/
-COPY services/ ./services/
 COPY scripts/ ./scripts/
 RUN chmod +x ./scripts/*.sh
 

@@ -97,7 +97,7 @@ class HttpSdkClient:
     Wraps :class:`agent_token_sdk.AgentClient` (which performs RFC 7521 client
     assertion → RFC 8693 token exchange → RFC 9449 DPoP → Gateway POST). Each
     call uses the orchestrator's RS256 private key (registered with the IdP via
-    ``services/idp/agents/register``) to sign client assertions and DPoP proofs.
+    ``infra/idp/agents/register``) to sign client assertions and DPoP proofs.
     """
 
     def __init__(

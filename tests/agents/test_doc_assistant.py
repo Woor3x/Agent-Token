@@ -23,7 +23,7 @@ from agents.doc_assistant.nodes.dispatcher import _topo_layers, dispatcher_node
 from agents.doc_assistant.nodes.planner import _rule_plan, validate_dag
 from agents.doc_assistant.nodes.synthesizer import synthesizer_node
 from agents.web_agent.handler import WebAgentHandler
-from services.feishu_mock.main import app as feishu_mock_app
+from tests._fixtures.feishu_mock.main import app as feishu_mock_app
 
 
 # ---------------------- Unit: planner + dispatcher helpers ---------------------
