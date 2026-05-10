@@ -16,9 +16,18 @@ from typing import Any
 _BT_TEXT = 2
 _BT_H1 = 3
 _BT_H2 = 4
+_BT_CODE = 14
 
-_KIND_TO_INT = {"heading1": _BT_H1, "heading2": _BT_H2, "text": _BT_TEXT}
-_INT_TO_FIELD = {_BT_H1: "heading1", _BT_H2: "heading2", _BT_TEXT: "text"}
+# Feishu language enum for code blocks. 1 = PLAIN_TEXT.
+# https://open.feishu.cn/document/server-docs/docs/docs/docx-v1/data-structure/block#code
+_LANG_PLAIN = 1
+
+_KIND_TO_INT = {
+    "heading1": _BT_H1,
+    "heading2": _BT_H2,
+    "text": _BT_TEXT,
+    "code": _BT_CODE,
+}
 
 
 def _text_run(content: str) -> dict[str, Any]:
@@ -27,15 +36,29 @@ def _text_run(content: str) -> dict[str, Any]:
     return {"text_run": {"content": content or " ", "text_element_style": {}}}
 
 
+def _build_block(kind: str, text: str) -> dict[str, Any]:
+    bt = _KIND_TO_INT.get(kind, _BT_TEXT)
+    if bt == _BT_CODE:
+        # Code blocks render in monospace with line wrapping disabled — ideal
+        # for ASCII flow diagrams. Language defaults to plain text.
+        return {
+            "block_type": bt,
+            "code": {
+                "elements": [_text_run(text)],
+                "style": {"language": _LANG_PLAIN, "wrap": False},
+            },
+        }
+    field = {_BT_H1: "heading1", _BT_H2: "heading2", _BT_TEXT: "text"}[bt]
+    return {
+        "block_type": bt,
+        field: {"elements": [_text_run(text)], "style": {}},
+    }
+
+
 def to_feishu_children(blocks: list[dict]) -> list[dict]:
     out: list[dict] = []
     for b in blocks:
         kind = b.get("block_type", "text")
-        bt = _KIND_TO_INT.get(kind, _BT_TEXT)
-        field = _INT_TO_FIELD[bt]
         text = str(b.get("text", ""))
-        out.append({
-            "block_type": bt,
-            field: {"elements": [_text_run(text)], "style": {}},
-        })
+        out.append(_build_block(kind, text))
     return out

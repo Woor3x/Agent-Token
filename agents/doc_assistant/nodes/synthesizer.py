@@ -1,5 +1,11 @@
 """Synthesizer node: fuse agent results into document blocks.
 
+Optionally embeds an ASCII flow diagram of the executed DAG between the
+executive summary and the per-section breakdown — controlled by env
+``DOC_ASCII_FLOW`` (``auto`` / ``always`` / ``off``, default ``auto``) or
+``state["ascii_flow_mode"]`` for per-request override. The diagram lives in a
+Feishu Docx code block so it renders in a monospace font.
+
 When ``state["llm"]`` carries an :class:`LLMProvider` instance, the node also
 prepends an LLM-generated executive summary block. Without an LLM (the tests'
 default) the node is purely template-driven so behavior stays deterministic.
@@ -20,12 +26,15 @@ plain summary block instead of failing the whole doc.
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
 
 from agents.common.llm import ChatMessage, LLMError, LLMProvider
 from agents.common.logging import get_logger
+
+from ._ascii_flow import render_dag_ascii, should_render
 
 _log = get_logger("agents.doc_assistant.synthesizer")
 
@@ -244,7 +253,19 @@ async def synthesizer_node(state: dict[str, Any]) -> dict[str, Any]:
         blocks.append({"block_type": "heading2", "text": "执行摘要"})
         blocks.append({"block_type": "text", "text": summary})
 
-    dag_by_id = {t["id"]: t for t in state.get("dag", [])}
+    # Optional ASCII flow diagram (monospace code block) — gives readers a
+    # quick visual of which agents/tasks contributed to the report.
+    flow_mode = state.get("ascii_flow_mode") or os.environ.get(
+        "DOC_ASCII_FLOW", "auto"
+    )
+    dag = state.get("dag", []) or []
+    if should_render(dag, flow_mode):
+        diagram = render_dag_ascii(dag)
+        if diagram:
+            blocks.append({"block_type": "heading2", "text": "执行流程图"})
+            blocks.append({"block_type": "code", "text": diagram})
+
+    dag_by_id = {t["id"]: t for t in dag}
     for tid, data in state.get("results", {}).items():
         task = dag_by_id.get(tid, {})
         action = task.get("action", "")

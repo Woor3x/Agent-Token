@@ -207,6 +207,103 @@ async def test_dispatcher_drops_unsafe_fetch_urls() -> None:
     assert fetched == ["https://ok.example.com/"]
 
 
+def test_ascii_flow_render_layered() -> None:
+    from agents.doc_assistant.nodes._ascii_flow import render_dag_ascii
+
+    dag = [
+        {"id": "t1", "agent": "web_agent", "action": "web.search",
+         "resource": "*", "params": {"query": "xss", "fetch_top_k": 2}, "deps": []},
+        {"id": "t3", "agent": "web_agent", "action": "web.fetch",
+         "resource": "https://owasp.org/x", "params": {}, "deps": ["t1"]},
+        {"id": "t4", "agent": "web_agent", "action": "web.fetch",
+         "resource": "https://acunetix.com/y", "params": {}, "deps": ["t1"]},
+        {"id": "t2", "agent": "doc_assistant", "action": "feishu.doc.write",
+         "resource": "doc_token:auto", "params": {}, "deps": ["t1", "t3", "t4"]},
+    ]
+    out = render_dag_ascii(dag)
+    assert "执行流程" in out
+    assert "[t1] web_agent.web.search" in out
+    assert 'query="xss"' in out
+    # Layer 2 has 2 fetch tasks → must be rendered as fan-out branches.
+    assert out.count("├─▶") >= 2
+    assert "owasp.org" in out and "acunetix.com" in out
+    assert "[t2] doc_assistant.feishu.doc.write" in out
+
+
+def test_ascii_flow_should_render_modes() -> None:
+    from agents.doc_assistant.nodes._ascii_flow import should_render
+
+    one_task = [
+        {"id": "t1", "agent": "web_agent", "action": "web.search", "deps": []},
+        {"id": "t2", "agent": "doc_assistant", "action": "feishu.doc.write", "deps": ["t1"]},
+    ]
+    two_tasks = one_task + [
+        {"id": "t3", "agent": "web_agent", "action": "web.fetch", "deps": ["t1"]},
+    ]
+    # auto: needs ≥2 non-writer tasks
+    assert should_render(one_task, "auto") is False
+    assert should_render(two_tasks, "auto") is True
+    # always: render whenever DAG non-empty
+    assert should_render(one_task, "always") is True
+    # off: never
+    assert should_render(two_tasks, "off") is False
+
+
+@pytest.mark.asyncio
+async def test_synthesizer_inserts_ascii_flow_block(monkeypatch) -> None:
+    monkeypatch.setenv("DOC_ASCII_FLOW", "always")
+    state = {
+        "dag": [
+            {"id": "t1", "agent": "data_agent", "action": "feishu.bitable.read",
+             "resource": "app_token:bascn/table:tbl1", "deps": []},
+            {"id": "t2", "agent": "doc_assistant", "action": "feishu.doc.write",
+             "resource": "doc_token:auto", "deps": ["t1"]},
+        ],
+        "results": {
+            "t1": {"records": [{"fields": {"region": "N", "sales": 100}}], "count": 1},
+        },
+    }
+    out = await synthesizer_node(state)
+    blocks = out["blocks"]
+    code_blocks = [b for b in blocks if b.get("block_type") == "code"]
+    assert len(code_blocks) == 1
+    assert "执行流程" in code_blocks[0]["text"]
+    assert "[t1] data_agent.feishu.bitable.read" in code_blocks[0]["text"]
+    # Heading present too
+    assert any(b.get("text") == "执行流程图" for b in blocks)
+
+
+@pytest.mark.asyncio
+async def test_synthesizer_skips_ascii_flow_when_off(monkeypatch) -> None:
+    monkeypatch.setenv("DOC_ASCII_FLOW", "off")
+    state = {
+        "dag": [
+            {"id": "t1", "agent": "web_agent", "action": "web.search", "resource": "*", "deps": []},
+            {"id": "t3", "agent": "web_agent", "action": "web.fetch", "resource": "https://x.example.com/", "deps": ["t1"]},
+            {"id": "t2", "agent": "doc_assistant", "action": "feishu.doc.write", "resource": "doc_token:auto", "deps": ["t1", "t3"]},
+        ],
+        "results": {
+            "t1": {"results": [], "count": 0, "query": "x"},
+            "t3": {"url": "https://x.example.com/", "summary": "ok", "length": 1},
+        },
+    }
+    out = await synthesizer_node(state)
+    assert all(b.get("block_type") != "code" for b in out["blocks"])
+
+
+def test_feishu_blocks_translates_code_block() -> None:
+    from agents.doc_assistant.nodes._feishu_blocks import to_feishu_children
+
+    out = to_feishu_children([
+        {"block_type": "heading1", "text": "T"},
+        {"block_type": "code", "text": "[t1] x\n[t2] y"},
+    ])
+    assert out[0]["block_type"] == 3  # H1
+    assert out[1]["block_type"] == 14  # CODE
+    assert out[1]["code"]["style"]["language"] == 1  # PLAIN_TEXT
+    assert out[1]["code"]["elements"][0]["text_run"]["content"] == "[t1] x\n[t2] y"
+
+
 @pytest.mark.asyncio
 async def test_synthesizer_emits_blocks() -> None:
     state = {
