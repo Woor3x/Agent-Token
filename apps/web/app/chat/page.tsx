@@ -90,21 +90,75 @@ export default function ChatPage() {
     return "?";
   }
 
+  // Strip any existing query/fragment from a Feishu URL so we can re-append
+  // ``?table=...&from=from_copylink`` cleanly. Backend drive listings come
+  // back without query params, but we still defend against future shape
+  // changes.
+  function _stripQuery(u: string): string {
+    const i = u.indexOf("?");
+    const j = u.indexOf("#");
+    const cut = [i, j].filter((x) => x >= 0).reduce((a, b) => Math.min(a, b), u.length);
+    return u.slice(0, cut);
+  }
+
+  // Ensure ``?from=from_copylink`` is on the URL — without it, Feishu wraps
+  // the deep-link in a user-verification challenge that breaks anonymous
+  // / cross-tenant viewers. ``key=val`` already present is left untouched.
+  function _withCopyLink(u: string): string {
+    if (!u || u === "#") return u;
+    if (u.includes("from=from_copylink")) return u;
+    return u + (u.includes("?") ? "&" : "?") + "from=from_copylink";
+  }
+
+  // Build a clickable Feishu URL for one selection. Prefer the upstream URL
+  // captured at pick time (tenant subdomain, e.g.
+  // https://jcneyh7qlo8i.feishu.cn/base/<token>?from=from_copylink) — the
+  // bare https://feishu.cn/... shape triggers Feishu's user-verification flow.
+  // For sub-table picks we splice in ?table=<id>&from=from_copylink.
+  function selUrl(s: BitableSelection): string {
+    if (s.url) {
+      if (s.kind === "bitable" && s.table_id) {
+        return `${_stripQuery(s.url)}?table=${s.table_id}&from=from_copylink`;
+      }
+      return _withCopyLink(s.url);
+    }
+    // Last-resort fallback (kept for legacy state without url field).
+    if (s.kind === "docx" && s.document_id) {
+      return `https://feishu.cn/docx/${s.document_id}?from=from_copylink`;
+    }
+    if (s.app_token) {
+      const base = `https://feishu.cn/base/${s.app_token}`;
+      return s.table_id
+        ? `${base}?table=${s.table_id}&from=from_copylink`
+        : `${base}?from=from_copylink`;
+    }
+    return "#";
+  }
+
+  // Same idea for raw picker rows — folder rows have no public deep link, so
+  // we only emit a URL for files the user can actually open in Feishu.
+  function fileUrl(f: DriveFile): string | null {
+    // Backend drive.list returns the tenant-subdomain URL straight from the
+    // Feishu API. Folders aren't deep-linkable so we leave them alone; for
+    // base/docx we splice in ``?from=from_copylink`` so anonymous viewers
+    // bypass Feishu's user-verification gate.
+    if (f.url) return f.type === "folder" ? f.url : _withCopyLink(f.url);
+    if (f.type === "bitable") return `https://feishu.cn/base/${f.token}?from=from_copylink`;
+    if (f.type === "docx") return `https://feishu.cn/docx/${f.token}?from=from_copylink`;
+    if (f.type === "folder") return `https://feishu.cn/drive/folder/${f.token}`;
+    return null;
+  }
+
   async function submit() {
     const prompt = input.trim();
     if (!prompt || loading) return;
     setInput("");
-    const sourcesLine =
-      bitables.length > 0
-        ? bitables.map((b) => `📊 ${selLabel(b)}`).join("\n") + "\n"
-        : "";
-    addMessage({ role: "user", text: `${sourcesLine}${prompt}` });
+    const picked = bitables.length > 0 ? [...bitables] : undefined;
+    addMessage({ role: "user", text: prompt, sources: picked });
     setTaskStatus("running");
 
     try {
-      const resp = await sendChat(prompt, {
-        bitables: bitables.length > 0 ? bitables : undefined,
-      });
+      const resp = await sendChat(prompt, { bitables: picked });
       addMessage({ role: "agent", text: extractContent(resp), response: resp });
       setTaskStatus("idle");
     } catch (e) {
@@ -162,7 +216,7 @@ export default function ChatPage() {
   // Docx: nothing to drill into; add it to the selection list directly.
   async function pickFile(f: DriveFile) {
     if (f.type === "docx") {
-      addSel({ kind: "docx", document_id: f.token, name: f.name });
+      addSel({ kind: "docx", document_id: f.token, name: f.name, url: f.url });
       return;
     }
     setPickedFile(f);
@@ -177,7 +231,7 @@ export default function ChatPage() {
 
   // "Select the whole bitable" — analyse all tables under one app_token.
   function pickWholeBitable(f: DriveFile) {
-    addSel({ kind: "bitable", app_token: f.token, name: f.name });
+    addSel({ kind: "bitable", app_token: f.token, name: f.name, url: f.url });
   }
 
   function pickTable(t: BitableTable) {
@@ -187,6 +241,7 @@ export default function ChatPage() {
       app_token: pickedFile.token,
       table_id: t.table_id,
       name: `${pickedFile.name} / ${t.name}`,
+      url: pickedFile.url,
     });
     // Drop back to the file list so the user can pick another source if they
     // want — closing only happens via the explicit 完成/× buttons.
@@ -317,6 +372,14 @@ export default function ChatPage() {
           >
             <span>{b.kind === "docx" ? "📄" : b.table_id ? "📊" : "📊✓"}</span>
             <span>{selLabel(b)}</span>
+            <a
+              href={selUrl(b)}
+              target="_blank"
+              rel="noreferrer"
+              title="在飞书中打开"
+              className="hover:underline opacity-80 hover:opacity-100"
+              onClick={(e) => e.stopPropagation()}
+            >↗</a>
             <button
               onClick={() => removeSel(i)}
               className="hover:text-slate-900"
@@ -495,6 +558,16 @@ export default function ChatPage() {
                             {wholeSelected ? "✓ 已加入" : "✓ 整选"}
                           </button>
                         )}
+                        {fileUrl(f) && (
+                          <a
+                            href={fileUrl(f)!}
+                            target="_blank"
+                            rel="noreferrer"
+                            title="在飞书中打开"
+                            onClick={(e) => e.stopPropagation()}
+                            className="self-center px-2 rounded-lg text-sm text-blue-600 hover:bg-blue-50 border border-blue-200"
+                          >↗</a>
+                        )}
                       </li>
                     );
                   })}
@@ -513,11 +586,11 @@ export default function ChatPage() {
                         b.table_id === t.table_id
                     );
                     return (
-                      <li key={t.table_id}>
+                      <li key={t.table_id} className="flex items-stretch gap-1">
                         <button
                           onClick={() => pickTable(t)}
                           disabled={selected}
-                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-emerald-50 text-sm text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                          className="flex-1 text-left px-3 py-2 rounded-lg hover:bg-emerald-50 text-sm text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                         >
                           <span className="flex-1 min-w-0">
                             <div className="font-medium truncate">{t.name || t.table_id}</div>
@@ -525,6 +598,18 @@ export default function ChatPage() {
                           </span>
                           {selected && <span className="text-emerald-600 text-xs">✓ 已选</span>}
                         </button>
+                        <a
+                          href={
+                            pickedFile.url
+                              ? `${_stripQuery(pickedFile.url)}?table=${t.table_id}&from=from_copylink`
+                              : `https://feishu.cn/base/${pickedFile.token}?table=${t.table_id}&from=from_copylink`
+                          }
+                          target="_blank"
+                          rel="noreferrer"
+                          title="在飞书中打开"
+                          onClick={(e) => e.stopPropagation()}
+                          className="self-center px-2 rounded-lg text-sm text-blue-600 hover:bg-blue-50 border border-blue-200"
+                        >↗</a>
                       </li>
                     );
                   })}

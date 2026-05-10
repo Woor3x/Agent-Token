@@ -11,7 +11,7 @@ from agents.common.config import AgentConfig
 from agents.common.server import AgentServer, sign_mock_token
 from agents.data_agent.feishu.oauth import FeishuOAuth
 from agents.data_agent.handler import DataAgentHandler
-from services.feishu_mock.main import app as feishu_mock_app
+from tests._fixtures.feishu_mock.main import app as feishu_mock_app
 
 
 def _feishu_client_factory():

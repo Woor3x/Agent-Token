@@ -10,6 +10,30 @@ import Markdown from "@/components/Markdown";
  * text inside each block; we just prepend # / ## / ### for headings and wrap
  * code blocks in fenced markdown so the GFM renderer takes over from there.
  */
+// Split the synthesizer's free-form text block on bare line breaks while
+// preserving structural lines (markdown lists ``- foo`` / ``* foo`` / ``1. foo``
+// and table rows starting with ``|``) which already have their own line-break
+// semantics. Without this, the synthesizer's multi-sentence summary was
+// emitted as a single ``\n``-separated paragraph and CommonMark folded every
+// newline into a single space.
+function _expandSoftBreaks(t: string): string {
+  if (!t) return t;
+  const lines = t.split("\n");
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    out.push(line);
+    if (i === lines.length - 1) break;
+    const next = lines[i + 1];
+    const isStruct = (s: string): boolean =>
+      /^\s*([-*+]\s|\d+[.)]\s|\|)/.test(s) || /^\s*$/.test(s);
+    // Only inflate to "\n\n" when neither side is a list/table/blank line —
+    // those are already valid block separators on their own.
+    if (!isStruct(line) && !isStruct(next)) out.push("");
+  }
+  return out.join("\n");
+}
+
 function blocksToMarkdown(blocks: FeishuBlock[]): string {
   const out: string[] = [];
   for (const b of blocks) {
@@ -25,10 +49,15 @@ function blocksToMarkdown(blocks: FeishuBlock[]): string {
         out.push(`### ${t}`);
         break;
       case "code":
-        out.push("```\n" + t + "\n```");
+        // Tag the fence with a language so ReactMarkdown's renderer recognises
+        // the code node as a *block* (className "language-…") and routes it
+        // through the <pre> branch in components/Markdown.tsx; without a
+        // language the renderer treats it as inline <code> and collapses
+        // newlines, which mangles the ASCII flow diagram.
+        out.push("```text\n" + t + "\n```");
         break;
       default:
-        out.push(t);
+        out.push(_expandSoftBreaks(t));
     }
   }
   return out.join("\n\n");

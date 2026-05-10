@@ -1,4 +1,4 @@
-## Agent-Token full integration stack — M1 (IdP + OPA + Redis) + M2 (Gateway) + M3 (AuditAPI) + M4/M5 agents + sdk.
+## Agent-Token full integration stack — IdP + OPA + Redis + Gateway + AuditAPI + agents + web UI.
 ##
 ## Bring up:
 ##     docker compose up --build
@@ -7,7 +7,6 @@
 ##     curl http://localhost:6379  (redis)
 ##     curl http://localhost:8181/health
 ##     curl http://localhost:8000/healthz
-##     curl http://localhost:9000/healthz
 ##     curl http://localhost:9200/healthz
 ##     curl http://localhost:8090/healthz
 ##     curl http://localhost:8100/healthz
@@ -19,10 +18,10 @@ x-agent-env: &agent-env
   IDP_TOKEN_EXCHANGE_URL: http://idp:8000/token/exchange
   ADMIN_TOKEN: admin-secret-token
   GATEWAY_URL: http://gateway:9200
-  # FEISHU_BASE 默认 mock，可在 .env 覆盖为 https://open.feishu.cn 接真飞书。
-  # 当 FEISHU_BASE 不是 feishu-mock 时，oauth.py 会 fail-fast 拦住占位凭证，避免误打 prod。
+  # FEISHU_BASE points at real Feishu Open Platform; oauth.py fail-fasts on
+  # placeholder credentials so the stack never accidentally hits prod with
+  # demo secrets.
   FEISHU_BASE: ${FEISHU_BASE:-https://open.feishu.cn}
-  FEISHU_MOCK: ${FEISHU_MOCK:-true}
   FEISHU_APP_ID: ${FEISHU_APP_ID:-}
   FEISHU_APP_SECRET: ${FEISHU_APP_SECRET:-}
   # FEISHU_DOCX_FOLDER_TOKEN: only read when DOC_STORAGE=feishu (writes
@@ -58,7 +57,7 @@ x-agent-env: &agent-env
 
 services:
 
-  # ---- M1 infrastructure ----------------------------------------------------
+  # ---- infrastructure -------------------------------------------------------
 
   redis:
     image: redis:7.2-alpine
@@ -73,8 +72,8 @@ services:
     image: openpolicyagent/opa:0.63.0
     command: run --server --log-level info --ignore='*_test.rego' /policies /data
     volumes:
-      - ./services/opa/policies:/policies:ro
-      - ./services/opa/data:/data:ro
+      - ./infra/opa/policies:/policies:ro
+      - ./infra/opa/data:/data:ro
     ports: ["8181:8181"]
     healthcheck:
       test: ["CMD", "/opa", "eval", "-f", "raw", "1+1"]
@@ -84,7 +83,7 @@ services:
 
   idp:
     build:
-      context: ./services/idp
+      context: ./infra/idp
       dockerfile: Dockerfile
     environment:
       IDP_ISSUER: https://idp.local
@@ -118,25 +117,14 @@ services:
       timeout: 3s
       retries: 15
 
-  # ---- M5 mocks -------------------------------------------------------------
-
-  feishu-mock:
-    build: .
-    image: agent-token/agent-base
-    environment:
-      <<: *agent-env
-      APP_MODULE: services.feishu_mock.main:app
-      PORT: "9000"
-    ports: ["9000:9000"]
-
-  # ---- M2 real gateway (replaces M5 gateway-mock) ---------------------------
+  # ---- gateway --------------------------------------------------------------
   #
   # Settings keyed via ``GW_*`` env (pydantic env_prefix). Internal+external
   # port pinned to 9200 so DPoP htu (signed by SDK against GATEWAY_URL) and
   # gateway's ``request.url`` match host and port exactly.
   gateway:
     build:
-      context: ./services/gateway
+      context: ./infra/gateway
       dockerfile: Dockerfile
     environment:
       GW_HOST: 0.0.0.0
@@ -178,11 +166,11 @@ services:
       web-agent:
         condition: service_started
 
-  # ---- M3 audit API ---------------------------------------------------------
+  # ---- audit API ------------------------------------------------------------
 
   audit-api:
     build:
-      context: ./services/audit-api
+      context: ./infra/audit-api
       dockerfile: Dockerfile
     environment:
       AUDIT_HOST: 0.0.0.0
@@ -202,7 +190,7 @@ services:
       timeout: 3s
       retries: 15
 
-  # ---- M4 agents ------------------------------------------------------------
+  # ---- agents ---------------------------------------------------------------
   #
   # Each agent boots via scripts/agent_entrypoint.sh which:
   #   1. waits for IdP healthy
@@ -226,8 +214,6 @@ services:
     depends_on:
       idp:
         condition: service_healthy
-      feishu-mock:
-        condition: service_started
 
   data-agent:
     build: .
@@ -245,8 +231,6 @@ services:
     depends_on:
       idp:
         condition: service_healthy
-      feishu-mock:
-        condition: service_started
 
   web-agent:
     build: .
@@ -269,7 +253,7 @@ services:
 
   web-ui:
     build:
-      context: ./services/web
+      context: ./apps/web
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_OIDC_CLIENT_ID: web-ui
@@ -278,7 +262,6 @@ services:
       IDP_URL:           http://idp:8000
       DOC_ASSISTANT_URL: http://doc-assistant:8100
       AUDIT_URL:         http://audit-api:8090
-      FEISHU_URL:        http://feishu-mock:9000
     ports: ["3000:3000"]
     depends_on:
       idp:

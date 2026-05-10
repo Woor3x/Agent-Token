@@ -111,5 +111,8 @@ keys/
 # Local override of compose
 docker-compose.override.yml
 
-# Personal drafts / notes — never push
-personal/
+# Playwright MCP debug artifacts (snapshots, screenshots) created during
+# in-session UI debugging. Never commit.
+.playwright-mcp/
+doc-render*.png
+doc-render*.md

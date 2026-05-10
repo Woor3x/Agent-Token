@@ -31,6 +31,16 @@
 - recommendations 1-3 条；如果输入完全无法支撑建议，输出空数组 []。
 - 整个 JSON 必须可被 json.loads 直接解析，不能有 trailing comma、注释、未转义换行。
 
+# 输入清洗（重要）
+
+来自 web.search / web.fetch 的 snippet 经常夹带：编码错误产生的乱码字串（连续问号 ?，西里尔字母与中文混杂、`ҳ|||ʱ` 这类不可读片段）；JavaScript / HTML 残片（`window.open(...)`、`function(...)`、`onclick=`、`var ... =`、`{...}`、CSS 类名）；网站导航 / 广告（如 `首页 | 登录 | 体育 | 商业` 这种竖线分隔的菜单条）；Top20 / 排行榜目录之类与正文无关的结构。
+
+处理规则：
+- 看到上述噪声片段，**直接忽略**，不要在 summary / observations / recommendations 中复述、引用或解释。
+- 如果一条 hit 的 title / snippet 完全是乱码或全是 JS 代码，把这条 hit 当作"无内容"，不要拿它做事实依据。
+- 如果某个数据来源全部 hit 都被噪声覆盖，对应 observations[*].text 写"该来源未抓取到可读内容，建议改用更具体的关键词重新检索"，而不是硬凑文本。
+- 永远不要尝试"翻译"或"还原"乱码 — 直接丢弃。
+
 # 反例（禁止出现）
 
 - "title":"Auto Report"  ← 占位词

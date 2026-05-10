@@ -79,15 +79,164 @@ def url_allowed(url: str, *, allowlist: dict | None = None) -> tuple[bool, str]:
     return True, "ok"
 
 
+def _decode_body(raw: bytes, content_type: str | None) -> str:
+    """Decode an HTML byte string with best-effort charset detection.
+
+    Order of attempts:
+      1. ``charset=`` parameter on the ``Content-Type`` header.
+      2. ``<meta charset="...">`` / ``<meta http-equiv="content-type" ...>``
+         within the first 2 KiB of the body.
+      3. ``charset_normalizer`` heuristic detection (handles GBK / Big5 /
+         Shift_JIS pages that omit the meta tag).
+      4. UTF-8 with ``errors="replace"`` as last resort.
+    """
+    import re as _re
+
+    enc: str | None = None
+    if content_type:
+        m = _re.search(r"charset=([\w-]+)", content_type, flags=_re.I)
+        if m:
+            enc = m.group(1).strip().lower()
+    if not enc:
+        head = raw[:2048]
+        m = _re.search(rb'<meta[^>]+charset\s*=\s*["\']?([\w-]+)', head, flags=_re.I)
+        if m:
+            enc = m.group(1).decode("ascii", errors="ignore").strip().lower()
+    if not enc:
+        try:
+            from charset_normalizer import from_bytes  # type: ignore
+
+            best = from_bytes(raw[:32_768]).best()
+            if best is not None:
+                enc = best.encoding
+        except Exception:  # noqa: BLE001 - dep optional
+            enc = None
+    enc = (enc or "utf-8").lower()
+    # gb2312 is a strict subset of gbk; use gbk so private-use chars don't
+    # blow up. Same idea for big5 → big5hkscs.
+    enc = {"gb2312": "gbk", "big5": "big5hkscs"}.get(enc, enc)
+    try:
+        return raw.decode(enc, errors="replace")
+    except (LookupError, UnicodeDecodeError):
+        return raw.decode("utf-8", errors="replace")
+
+
+# Mojibake-detection heuristic: drop chunks that look like a wrong-codec
+# decode (e.g. GBK page decoded as cp1251 → Cyrillic / Arabic / Hebrew soup).
+#
+# Three signals, any one triggers a drop:
+#   1. ≥8% U+FFFD replacements or control chars (utf-8 errors="replace" output).
+#   2. Single chunk mixes ≥2 "rare" non-CJK scripts (Cyrillic + Arabic + Hebrew
+#      + Greek + extended-Latin etc.). Real prose stays in one script family.
+#   3. ≥30% punctuation / symbol density inside an otherwise non-ASCII chunk
+#      (catches the ``ҳ|||ʱ|ʳ`` pattern where pipes interleave letter shards).
+#
+# Tuned to keep clean CJK (Han / Hiragana / Hangul), Latin prose, and bilingual
+# CJK+Latin sentences intact.
+_MOJIBAKE_BAD_CHARS = "\ufffd"
+_BAD_RATIO = 0.08
+
+# Unicode block ranges for "rare" scripts that should not naturally mix in
+# one extracted-text chunk. CJK / Latin / Hangul / Hiragana / Katakana are
+# considered "expected" and don't count toward the mix score.
+_RARE_BLOCKS: list[tuple[int, int]] = [
+    (0x0370, 0x03FF),  # Greek
+    (0x0400, 0x04FF),  # Cyrillic
+    (0x0500, 0x052F),  # Cyrillic Supplement
+    (0x0530, 0x058F),  # Armenian
+    (0x0590, 0x05FF),  # Hebrew
+    (0x0600, 0x06FF),  # Arabic
+    (0x0700, 0x074F),  # Syriac
+    (0x0900, 0x097F),  # Devanagari
+]
+
+
+def _rare_block(cp: int) -> int | None:
+    for i, (lo, hi) in enumerate(_RARE_BLOCKS):
+        if lo <= cp <= hi:
+            return i
+    return None
+
+
+def _is_mojibake(s: str) -> bool:
+    """Detect chunks that are almost certainly wrong-codec decode garbage.
+
+    The hard part is *not* flagging legitimate Cyrillic / Greek / Arabic prose
+    that happens to live in our token stream. Real prose has long words,
+    word-boundary spaces, and low ASCII-punctuation density. Mojibake fragments
+    look like ``ҳ|||ʱ|ʳ`` — short letter shards interleaved with pipes /
+    other ASCII punctuation, no spaces.
+    """
+    if not s:
+        return False
+    n = len(s)
+    bad = 0
+    rare_blocks_seen: set[int] = set()
+    rare_chars = 0
+    punct_chars = 0
+    nonascii_chars = 0
+    for ch in s:
+        cp = ord(ch)
+        if ch in _MOJIBAKE_BAD_CHARS or (cp < 32 and ch not in "\n\t"):
+            bad += 1
+        if cp > 127:
+            nonascii_chars += 1
+            blk = _rare_block(cp)
+            if blk is not None:
+                rare_blocks_seen.add(blk)
+                rare_chars += 1
+        if ch in "|`~^_=+\\<>/[]{}":
+            punct_chars += 1
+    if bad / max(n, 1) >= _BAD_RATIO:
+        return True
+    punct_ratio = punct_chars / max(n, 1)
+    # ≥3 distinct rare scripts mixed inside one whitespace-bounded token —
+    # natural prose has spaces between language switches, so a single token
+    # spanning Cyrillic + Greek + Arabic is wrong-codec output.
+    if len(rare_blocks_seen) >= 3:
+        return True
+    # ≥2 rare scripts mixed + at least one ASCII pipe / bracket — covers the
+    # ``ҳ|||ʱ|ʳ|||ٲ|Ϻ|ר`` shape where pipes punctuate mixed letter shards.
+    if len(rare_blocks_seen) >= 2 and punct_chars >= 1:
+        return True
+    # Heavy ASCII-symbol density alongside rare-block characters → letter
+    # shards interleaved with pipes / brackets.
+    if rare_chars >= 2 and punct_ratio >= 0.30:
+        return True
+    return False
+
+
 def _extract_text(html: str, max_chars: int = 8000) -> str:
-    # Lightweight extraction — strip tags without pulling trafilatura for tests.
+    """Strip tags + inline JS/CSS + mojibake fragments from a fetched page.
+
+    Defense-in-depth for the LLM: search backends often leak ``onclick=`` /
+    ``<script>`` bodies / mojibake (GBK pages decoded as latin-1) into the
+    snippet, which then poisons the synthesizer prompt. We do a cheap pass
+    here so the LLM gets cleaner input; the LLM is also instructed (via
+    ``synthesizer_system.txt``) to ignore residue we miss.
+    """
     import re as _re
 
     text = _re.sub(r"<script[\s\S]*?</script>", " ", html, flags=_re.I)
     text = _re.sub(r"<style[\s\S]*?</style>", " ", text, flags=_re.I)
+    text = _re.sub(r"<noscript[\s\S]*?</noscript>", " ", text, flags=_re.I)
+    # Strip inline event handlers + style attrs before the global tag drop, so
+    # their JS payload doesn't leak as plain text afterward (some search
+    # backends present already-extracted text where the value side leaked).
+    text = _re.sub(r"\s(on[a-z]+|style)\s*=\s*\"[^\"]*\"", " ", text, flags=_re.I)
+    text = _re.sub(r"\s(on[a-z]+|style)\s*=\s*'[^']*'", " ", text, flags=_re.I)
     text = _re.sub(r"<[^>]+>", " ", text)
-    text = _re.sub(r"\s+", " ", text).strip()
-    return text[:max_chars]
+    # Kill obvious JS/CSS leftovers that survived (e.g. inline handlers
+    # rendered into snippets by upstream extractors).
+    text = _re.sub(
+        r"\b(?:window\.\w+|document\.\w+|function\s*\([^)]*\)|var\s+\w+\s*=)[^;\n]{0,200};?",
+        " ",
+        text,
+    )
+    # Split on whitespace, drop runs that look like mojibake before rejoining.
+    pieces = [p for p in _re.split(r"\s+", text) if p and not _is_mojibake(p)]
+    cleaned = " ".join(pieces).strip()
+    return cleaned[:max_chars]
 
 
 async def http_fetch(
@@ -106,6 +255,7 @@ async def http_fetch(
     try:
         async with c.stream("GET", url) as r:
             r.raise_for_status()
+            ctype = r.headers.get("content-type")
             chunks: list[bytes] = []
             total = 0
             async for buf in r.aiter_bytes():
@@ -113,7 +263,7 @@ async def http_fetch(
                 if total > max_size:
                     raise FetchBlocked("size_exceeded")
                 chunks.append(buf)
-        return b"".join(chunks).decode("utf-8", errors="replace")
+        return _decode_body(b"".join(chunks), ctype)
     finally:
         if own:
             await c.aclose()

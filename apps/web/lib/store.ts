@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { ChatResponse } from "@/types";
+import type { BitableSelection } from "@/lib/api";
 
 export type TaskStatus = "idle" | "running" | "error";
 
@@ -9,6 +10,10 @@ export interface Message {
   text: string;
   response?: ChatResponse;
   error?: string;
+  // For user messages: data sources picked when the prompt was sent. Rendered
+  // as clickable feishu.cn links above the prompt body so the reader can jump
+  // to the original bitable / docx that fed the report.
+  sources?: BitableSelection[];
 }
 
 interface ChatState {

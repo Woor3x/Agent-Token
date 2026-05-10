@@ -212,13 +212,32 @@ def _rows_to_table(records: list[dict]) -> list[dict]:
             if k not in seen:
                 seen.add(k)
                 keys.append(k)
-    header = " | ".join(keys)
-    lines = [header, " | ".join("---" for _ in keys)]
+
+    def _row(cells: list[str]) -> str:
+        # Canonical GFM table row: leading + trailing pipe so remark-gfm parses
+        # reliably even when the preceding paragraph lacks a blank-line gap.
+        return "| " + " | ".join(cells) + " |"
+
+    def _clean(v: Any) -> str:
+        # Cell values must not contain raw pipes (would split the row) or
+        # newlines (would terminate the table mid-stream). ``_fmt_cell`` already
+        # collapses string whitespace; defend against list/dict shapes that
+        # round-tripped through ``str(...)``.
+        s = _fmt_cell(v)
+        return s.replace("|", "\\|").replace("\n", " ").strip()
+
+    header = _row(keys)
+    divider = _row(["---"] * len(keys))
+    lines = [header, divider]
     for r in records:
         f = r.get("fields") or {}
-        # Escape stray pipes so a cell value can't shatter the markdown row.
-        lines.append(" | ".join(_fmt_cell(f.get(k, "")).replace("|", "\\|") for k in keys))
-    return [{"block_type": "text", "text": "\n".join(lines)}]
+        lines.append(_row([_clean(f.get(k, "")) for k in keys]))
+    # Wrap with blank lines on both ends. ``blocksToMarkdown`` already joins
+    # with "\n\n", but an extra leading/trailing newline guards against
+    # adjacent text blocks that get merged into the same paragraph by future
+    # changes — markdown tables silently degrade to plain text without a
+    # blank line above them.
+    return [{"block_type": "text", "text": "\n" + "\n".join(lines) + "\n"}]
 
 
 def _users_to_block(users: list[dict]) -> list[dict]:
@@ -226,8 +245,61 @@ def _users_to_block(users: list[dict]) -> list[dict]:
     return [{"block_type": "text", "text": "\n".join(lines) or "(暂无成员)"}]
 
 
+# Embedded markdown links inside a snippet (Google News etc. dump their nav
+# bar into the search snippet, which arrives as ``[新闻](url). [图片](url)...``).
+# Strip the wrapper so only the visible label remains — otherwise the rendered
+# snippet looks like raw markdown source.
+_INLINE_LINK_RE = re.compile(r"\[([^\]\n]{0,80})\]\(\s*[^)\s]{1,300}\s*\)")
+_INLINE_IMG_RE = re.compile(r"!\[([^\]\n]{0,80})\]\(\s*[^)\s]{1,300}\s*\)")
+
+
+def _clean_snippet(s: str, max_len: int = 220) -> str:
+    """Normalize a search-result snippet into safe inline markdown.
+
+    1. Strip embedded ``[label](url)`` / ``![alt](url)`` patterns down to the
+       label so they don't render as nested links inside our outer
+       ``- [title](url) — snippet`` row.
+    2. Collapse whitespace runs (incl. newlines) into single spaces.
+    3. Defang remaining structural chars (``|`` for tables, leading ``#`` /
+       ``>`` / list markers) so the snippet stays inline.
+    4. Truncate to ``max_len`` so a single hit can't dominate the layout.
+    """
+    if not s:
+        return ""
+    s = _INLINE_IMG_RE.sub(r"\1", s)
+    s = _INLINE_LINK_RE.sub(r"\1", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    # Pipe would split markdown tables; backticks would open a code span and
+    # eat trailing content. Escape both. Brackets are safe now that link
+    # syntax is gone.
+    s = s.replace("|", "\\|").replace("`", "\\`")
+    if len(s) > max_len:
+        s = s[: max_len - 1].rstrip() + "…"
+    return s
+
+
+def _clean_title(s: str, max_len: int = 80) -> str:
+    """Snippet rules minus the link-stripping (titles rarely contain links)."""
+    if not s:
+        return "?"
+    s = re.sub(r"\s+", " ", s).strip()
+    s = s.replace("[", "(").replace("]", ")").replace("|", "/").replace("`", "'")
+    if len(s) > max_len:
+        s = s[: max_len - 1].rstrip() + "…"
+    return s
+
+
 def _search_to_block(hits: list[dict]) -> list[dict]:
-    lines = [f"- [{h.get('title','?')}]({h.get('url','')}) — {h.get('snippet','')}" for h in hits]
+    lines: list[str] = []
+    for h in hits:
+        title = _clean_title(h.get("title", "?"))
+        url = (h.get("url") or "").strip()
+        snippet = _clean_snippet(h.get("snippet", ""))
+        if url:
+            head = f"- [{title}]({url})"
+        else:
+            head = f"- {title}"
+        lines.append(f"{head} — {snippet}" if snippet else head)
     return [{"block_type": "text", "text": "\n".join(lines) or "(无检索结果)"}]
 
 
@@ -384,20 +456,29 @@ async def synthesizer_node(state: dict[str, Any]) -> dict[str, Any]:
             blocks.append({"block_type": "code", "text": diagram})
 
     dag_by_id = {t["id"]: t for t in dag}
+    # Track the last emitted section heading so that consecutive tasks of the
+    # same kind (e.g. multiple ``web.fetch`` legs auto-expanded after one
+    # ``web.search``) don't each emit their own ``网页摘要`` heading2 and
+    # leave a trail of empty sections between them.
+    last_section: str | None = None
     for tid, data in state.get("results", {}).items():
         task = dag_by_id.get(tid, {})
         action = task.get("action", "")
         section_title = _section_label(action, fallback_tid=f"{tid}: {action}")
-        blocks.append({"block_type": "heading2", "text": section_title})
+        if section_title != last_section:
+            blocks.append({"block_type": "heading2", "text": section_title})
+            last_section = section_title
 
-        # Per-section LLM observation (if matched), else deterministic fallback for tables.
-        llm_obs = obs_by_label.get(section_title)
-        if llm_obs:
-            blocks.append({"block_type": "text", "text": llm_obs})
-        elif action in ("feishu.bitable.read", "feishu.bitable.read_all"):
-            cheap = _bitable_observation(data.get("records") or [])
-            if cheap:
-                blocks.append({"block_type": "text", "text": cheap})
+            # Per-section LLM observation (if matched), else deterministic
+            # fallback for tables. Only emit on the first task of a section so
+            # repeated fetches don't duplicate the observation block.
+            llm_obs = obs_by_label.get(section_title)
+            if llm_obs:
+                blocks.append({"block_type": "text", "text": llm_obs})
+            elif action in ("feishu.bitable.read", "feishu.bitable.read_all"):
+                cheap = _bitable_observation(data.get("records") or [])
+                if cheap:
+                    blocks.append({"block_type": "text", "text": cheap})
 
         if action == "feishu.bitable.read":
             blocks.extend(_rows_to_table(data.get("records") or []))
@@ -422,7 +503,23 @@ async def synthesizer_node(state: dict[str, Any]) -> dict[str, Any]:
         elif action == "web.search":
             blocks.extend(_search_to_block(data.get("results") or []))
         elif action == "web.fetch":
-            blocks.append({"block_type": "text", "text": data.get("summary", "")})
+            url = (data or {}).get("url") or task.get("resource") or ""
+            summary = ((data or {}).get("summary") or "").strip()
+            err = (data or {}).get("error")
+            host = ""
+            if url:
+                from urllib.parse import urlparse as _urlparse
+                try:
+                    host = _urlparse(url).hostname or url
+                except ValueError:
+                    host = url
+            if host:
+                blocks.append({"block_type": "heading3", "text": host})
+            if summary:
+                blocks.append({"block_type": "text", "text": summary})
+            else:
+                msg = "(抓取失败)" if err else "(无内容)"
+                blocks.append({"block_type": "text", "text": msg})
         else:
             blocks.append({"block_type": "text", "text": str(data)})
 
