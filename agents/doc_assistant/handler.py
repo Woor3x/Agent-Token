@@ -55,8 +55,20 @@ class DocAssistantHandler:
         ):
             subject_token = (body.get("context") or {}).get("subject_token") or claims.raw_jwt
             sdk = self._build_sdk(claims=claims, subject_token=subject_token)
+            params = intent.get("params") or {}
+            # Forward picker selections from intent params so the planner can
+            # emit data-fetch tasks when this agent is reached via /invoke
+            # (instead of /chat). ``bitables`` (list) takes priority; legacy
+            # singleton ``bitable`` accepted for back-compat.
+            raw_bitables = params.get("bitables")
+            if isinstance(raw_bitables, list):
+                bitables_sel = [s for s in raw_bitables if isinstance(s, dict)]
+            else:
+                legacy = params.get("bitable")
+                bitables_sel = [legacy] if isinstance(legacy, dict) else []
+
             state: dict[str, Any] = {
-                "user_prompt": (intent.get("params") or {}).get("prompt", ""),
+                "user_prompt": params.get("prompt", ""),
                 "user_token": claims.raw,
                 "trace_id": claims.trace_id or new_ulid(),
                 "plan_id": claims.plan_id or new_ulid(),
@@ -65,6 +77,8 @@ class DocAssistantHandler:
                 "feishu_oauth": self._oauth,
                 "client_factory": self._client_factory,
                 "llm": self._llm,
+                "bitable": bitables_sel[0] if bitables_sel else None,
+                "bitables": bitables_sel,
             }
             final = await run_graph(state)
             return {

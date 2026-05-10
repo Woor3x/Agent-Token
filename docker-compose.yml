@@ -25,9 +25,13 @@ x-agent-env: &agent-env
   FEISHU_MOCK: ${FEISHU_MOCK:-true}
   FEISHU_APP_ID: ${FEISHU_APP_ID:-}
   FEISHU_APP_SECRET: ${FEISHU_APP_SECRET:-}
-  FEISHU_BITABLE_APP_TOKEN: ${FEISHU_BITABLE_APP_TOKEN:-}
-  FEISHU_BITABLE_TABLE_ID: ${FEISHU_BITABLE_TABLE_ID:-}
+  # FEISHU_DOCX_FOLDER_TOKEN: only read when DOC_STORAGE=feishu (writes
+  # docs into a shared folder so tenant token avoids 403 on bot's private
+  # root). Default DOC_STORAGE=local doesn't touch it.
   FEISHU_DOCX_FOLDER_TOKEN: ${FEISHU_DOCX_FOLDER_TOKEN:-}
+  # Shared folder bot was added as collaborator on. Picker uses it as default
+  # root because /drive/v1/files (tenant token) only lists bot's own drive.
+  FEISHU_SHARED_ROOT_FOLDER: ${FEISHU_SHARED_ROOT_FOLDER:-}
   MOCK_AUTH: "false"
   VERIFY_DPOP: "false"
   POLICY_VERSION: v1.2.0
@@ -45,6 +49,11 @@ x-agent-env: &agent-env
   WEB_FETCH_DOMAIN_OPEN: ${WEB_FETCH_DOMAIN_OPEN:-false}
   WEB_AUTO_FETCH_TOP_K: ${WEB_AUTO_FETCH_TOP_K:-2}
   DOC_ASCII_FLOW: ${DOC_ASCII_FLOW:-auto}
+  # local | feishu — local persists reports to a JSON store in the
+  # doc_assistant container so the web UI can render them without needing
+  # OAuth user-scope on Feishu drive.
+  DOC_STORAGE: ${DOC_STORAGE:-local}
+  DOC_STORAGE_DIR: /app/data/docs
 
 services:
 
@@ -211,6 +220,7 @@ services:
       PORT: "8100"
     volumes:
       - doc_assistant_keys:/app/keys
+      - doc_assistant_data:/app/data
     ports: ["8100:8100"]
     depends_on:
       idp:
@@ -283,6 +293,7 @@ volumes:
   gateway_data:
   audit_api_data:
   doc_assistant_keys:
+  doc_assistant_data:
   data_agent_keys:
   web_agent_keys:
 

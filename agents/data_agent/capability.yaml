@@ -15,6 +15,25 @@ capabilities:
     resource_pattern: "calendar:*"
     constraints:
       max_calls_per_minute: 60
+  - action: feishu.drive.list
+    resource_pattern: "folder:*"
+    constraints:
+      max_calls_per_minute: 60
+  - action: feishu.bitable.list_tables
+    resource_pattern: "app_token:*"
+    constraints:
+      max_calls_per_minute: 60
+  - action: feishu.bitable.read_all
+    resource_pattern: "app_token:*"
+    constraints:
+      max_rows_per_call: 1000
+      max_tables: 20
+      max_calls_per_minute: 30
+  - action: feishu.docx.read
+    resource_pattern: "document_id:*"
+    constraints:
+      max_blocks: 500
+      max_calls_per_minute: 60
 delegation:
   accept_from:
     - doc_assistant

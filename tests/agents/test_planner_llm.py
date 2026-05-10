@@ -11,7 +11,16 @@ from agents.doc_assistant.nodes.planner import planner_node, validate_dag
 
 @pytest.mark.asyncio
 async def test_planner_no_llm_uses_rule() -> None:
-    out = await planner_node({"user_prompt": "汇总 Q1 销售业绩"})
+    # Picker selection is now required for any bitable task — no env fallback.
+    state = {
+        "user_prompt": "汇总 Q1 销售业绩",
+        "bitable": {
+            "kind": "bitable",
+            "app_token": "bascn_alice",
+            "table_id": "tbl_q1",
+        },
+    }
+    out = await planner_node(state)
     dag = out["dag"]
     actions = [t["action"] for t in dag]
     assert "feishu.bitable.read" in actions
@@ -63,7 +72,12 @@ async def test_planner_llm_appends_missing_doc_write() -> None:
 @pytest.mark.asyncio
 async def test_planner_llm_garbage_falls_back_to_rule() -> None:
     llm = MockLLMProvider(responses=["this is not json at all"])
-    out = await planner_node({"user_prompt": "汇总 Q1 销售业绩", "llm": llm})
+    state = {
+        "user_prompt": "汇总 Q1 销售业绩",
+        "llm": llm,
+        "bitable": {"kind": "bitable", "app_token": "bascn_alice", "table_id": "tbl_q1"},
+    }
+    out = await planner_node(state)
     dag = out["dag"]
     # rule path triggered → contains bitable.read
     assert any(t["action"] == "feishu.bitable.read" for t in dag)
@@ -80,7 +94,12 @@ async def test_planner_llm_invalid_dag_falls_back() -> None:
         ]
     })
     llm = MockLLMProvider(responses=[canned])
-    out = await planner_node({"user_prompt": "Q1 销售", "llm": llm})
+    state = {
+        "user_prompt": "Q1 销售",
+        "llm": llm,
+        "bitable": {"kind": "bitable", "app_token": "bascn_alice", "table_id": "tbl_q1"},
+    }
+    out = await planner_node(state)
     # falls back to rule, sales keyword hits bitable.read
     assert any(t["action"] == "feishu.bitable.read" for t in out["dag"])
 

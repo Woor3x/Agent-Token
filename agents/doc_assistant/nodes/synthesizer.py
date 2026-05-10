@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -42,11 +43,13 @@ _PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "synthesizer
 
 # Human-friendly Chinese section headings keyed by action enum.
 _SECTION_LABEL = {
-    "feishu.bitable.read": "业务数据",
-    "feishu.contact.read": "团队结构",
-    "feishu.calendar.read": "近期日程",
-    "web.search":           "行业调研",
-    "web.fetch":            "网页摘要",
+    "feishu.bitable.read":     "业务数据",
+    "feishu.bitable.read_all": "业务数据（全表）",
+    "feishu.contact.read":     "团队结构",
+    "feishu.calendar.read":    "近期日程",
+    "feishu.docx.read":        "原文摘录",
+    "web.search":              "行业调研",
+    "web.fetch":                "网页摘要",
 }
 
 # Default doc title when LLM is absent or output unusable.
@@ -67,12 +70,21 @@ def _bitable_observation(records: list[dict], top_n: int = 3) -> str | None:
     if not records:
         return None
     n = len(records)
-    # Find first numeric-ish column for a total.
+    # Find first true-numeric column for a total. Exclude bools and unix-ms
+    # timestamps — summing dates produces meaningless totals like
+    # "完成日期 合计 5.4e+15".
+    def _is_real_number(x: Any) -> bool:
+        return (
+            isinstance(x, (int, float))
+            and not isinstance(x, bool)
+            and not _looks_like_unix_ms(x)
+        )
+
     numeric_key: str | None = None
     total = 0.0
     for r in records:
         for k, v in (r.get("fields") or {}).items():
-            if isinstance(v, (int, float)) and not isinstance(v, bool):
+            if _is_real_number(v):
                 numeric_key = k
                 break
         if numeric_key:
@@ -80,11 +92,11 @@ def _bitable_observation(records: list[dict], top_n: int = 3) -> str | None:
     if numeric_key:
         for r in records:
             v = (r.get("fields") or {}).get(numeric_key)
-            if isinstance(v, (int, float)) and not isinstance(v, bool):
+            if _is_real_number(v):
                 total += float(v)
     parts: list[str] = [f"共 {n} 行数据"]
     if numeric_key:
-        parts.append(f"{numeric_key} 合计 {total:g}")
+        parts.append(f"{numeric_key} 合计 {_fmt_number(total)}")
     # Top-N: show first 3 rows' first textual field as labels
     label_keys: list[str] = []
     if records:
@@ -103,6 +115,93 @@ def _bitable_observation(records: list[dict], top_n: int = 3) -> str | None:
     return "；".join(parts) + "。"
 
 
+# Bitable cell shapes encountered in real Feishu responses:
+#   - Number: int OR float (large floats render as "1.9e+13" via str())
+#   - DateTime: int milliseconds since epoch (~1e12, e.g. 1731859200000)
+#   - User: list[{name, en_name, email, id}]
+#   - Text/RichText: list[{text, type}]
+#   - SingleSelect / MultiSelect: str OR list[str]
+# ``str(v)`` turns the dict/list shapes into raw Python repr garbage, and
+# floats over ~1e10 render in scientific notation. ``_fmt_cell`` normalizes
+# all of these into terse human strings before the markdown table is built.
+
+# Plausible unix-ms timestamp window: 2001-09-09 (1e12) to 2286 (1e13). Larger
+# than that → not a date; smaller → too noisy to convert. A few cents into the
+# range covers all practical Feishu DateTime fields.
+_MS_LO = 1_000_000_000_000  # 2001-09-09
+_MS_HI = 9_999_999_999_999  # 2286-11-20
+
+
+def _looks_like_unix_ms(n: float) -> bool:
+    return isinstance(n, (int, float)) and not isinstance(n, bool) and _MS_LO <= n <= _MS_HI
+
+
+def _fmt_number(v: int | float) -> str:
+    if isinstance(v, bool):
+        return str(v)
+    if isinstance(v, int):
+        return str(v)
+    # float: kill scientific notation; collapse integer-valued floats to int.
+    if v == int(v) and abs(v) < 1e15:
+        return str(int(v))
+    # ``f"{v:.6g}"`` keeps precision but can still produce "1e+15" — fall
+    # back to a fixed format with trimmed zeros.
+    s = f"{v:.6f}".rstrip("0").rstrip(".")
+    return s or "0"
+
+
+def _fmt_cell(v: Any) -> str:
+    """Render one Feishu bitable cell value as a short human string."""
+    if v is None or v == "":
+        return ""
+    if isinstance(v, bool):
+        return "是" if v else "否"
+    if isinstance(v, (int, float)):
+        if _looks_like_unix_ms(v):
+            try:
+                return datetime.fromtimestamp(v / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
+            except (OverflowError, OSError, ValueError):
+                pass
+        return _fmt_number(v)
+    if isinstance(v, str):
+        s = v.strip()
+        # Collapse internal whitespace runs so multi-line cells don't blow
+        # up the markdown table layout.
+        return re.sub(r"\s+", " ", s)
+    if isinstance(v, list):
+        if not v:
+            return ""
+        # Rich-text / Text element list: [{text, type}, ...]
+        if all(isinstance(x, dict) and "text" in x for x in v):
+            return _fmt_cell(" ".join(str(x.get("text", "")) for x in v))
+        # User / Member list: [{name|en_name|email, ...}, ...]
+        if all(isinstance(x, dict) and ("name" in x or "en_name" in x or "email" in x) for x in v):
+            names = [
+                str(x.get("name") or x.get("en_name") or x.get("email") or "")
+                for x in v
+            ]
+            return ", ".join(s for s in names if s)
+        # Attachment / URL list: [{name|file_name|url, ...}, ...]
+        if all(isinstance(x, dict) for x in v):
+            return ", ".join(
+                str(x.get("name") or x.get("file_name") or x.get("url") or json.dumps(x, ensure_ascii=False))
+                for x in v
+            )
+        # Plain primitive list (multi-select strings, etc.)
+        return ", ".join(_fmt_cell(x) for x in v)
+    if isinstance(v, dict):
+        # Single-element shapes that occasionally show up directly (not wrapped in list)
+        if "text" in v:
+            return _fmt_cell(v.get("text"))
+        if "name" in v or "en_name" in v:
+            return str(v.get("name") or v.get("en_name") or "")
+        if "url" in v:
+            return str(v.get("url") or "")
+        # Last-resort: compact JSON instead of Python repr.
+        return json.dumps(v, ensure_ascii=False)
+    return str(v)
+
+
 def _rows_to_table(records: list[dict]) -> list[dict]:
     if not records:
         return [{"block_type": "text", "text": "(暂无数据)"}]
@@ -117,7 +216,8 @@ def _rows_to_table(records: list[dict]) -> list[dict]:
     lines = [header, " | ".join("---" for _ in keys)]
     for r in records:
         f = r.get("fields") or {}
-        lines.append(" | ".join(str(f.get(k, "")) for k in keys))
+        # Escape stray pipes so a cell value can't shatter the markdown row.
+        lines.append(" | ".join(_fmt_cell(f.get(k, "")).replace("|", "\\|") for k in keys))
     return [{"block_type": "text", "text": "\n".join(lines)}]
 
 
@@ -147,8 +247,26 @@ def _digest_results(state: dict[str, Any]) -> str:
         compact: dict[str, Any] = {"task": tid, "action": action}
         if action == "feishu.bitable.read":
             recs = (data.get("records") or [])[:5]
-            compact["records"] = [r.get("fields") for r in recs]
+            compact["records"] = [
+                {k: _fmt_cell(v) for k, v in (r.get("fields") or {}).items()}
+                for r in recs
+            ]
             compact["count"] = data.get("count")
+        elif action == "feishu.bitable.read_all":
+            recs = (data.get("records") or [])[:5]
+            compact["records"] = [
+                {
+                    "_table": r.get("_table"),
+                    **{k: _fmt_cell(v) for k, v in (r.get("fields") or {}).items()},
+                }
+                for r in recs
+            ]
+            compact["count"] = data.get("count")
+            compact["tables"] = data.get("tables") or []
+        elif action == "feishu.docx.read":
+            blks = (data.get("blocks") or [])[:30]
+            compact["text"] = "\n".join(b.get("text", "") for b in blks)[:2000]
+            compact["block_count"] = data.get("block_count")
         elif action == "feishu.contact.read":
             users = (data.get("users") or [])[:8]
             compact["users"] = users
@@ -276,13 +394,25 @@ async def synthesizer_node(state: dict[str, Any]) -> dict[str, Any]:
         llm_obs = obs_by_label.get(section_title)
         if llm_obs:
             blocks.append({"block_type": "text", "text": llm_obs})
-        elif action == "feishu.bitable.read":
+        elif action in ("feishu.bitable.read", "feishu.bitable.read_all"):
             cheap = _bitable_observation(data.get("records") or [])
             if cheap:
                 blocks.append({"block_type": "text", "text": cheap})
 
         if action == "feishu.bitable.read":
             blocks.extend(_rows_to_table(data.get("records") or []))
+        elif action == "feishu.bitable.read_all":
+            # Group by ``_table`` and render one sub-section per table so wide
+            # bitables stay legible.
+            grouped: dict[str, list[dict]] = {}
+            for r in data.get("records") or []:
+                grouped.setdefault(r.get("_table") or "未命名", []).append(r)
+            for tname, rows in grouped.items():
+                blocks.append({"block_type": "heading3", "text": tname})
+                blocks.extend(_rows_to_table(rows))
+        elif action == "feishu.docx.read":
+            for b in (data.get("blocks") or [])[:200]:
+                blocks.append({"block_type": "text", "text": b.get("text", "")})
         elif action == "feishu.contact.read":
             blocks.extend(_users_to_block(data.get("users") or []))
         elif action == "feishu.calendar.read":

@@ -28,6 +28,11 @@
           "constraints": { "max_calls_per_minute": 60 }
         },
         {
+          "action": "feishu.bitable.read_all",
+          "resource_pattern": "app_token:*",
+          "constraints": { "max_calls_per_minute": 30 }
+        },
+        {
           "action": "feishu.contact.read",
           "resource_pattern": "contact:*",
           "constraints": { "max_calls_per_minute": 30 }
@@ -36,6 +41,11 @@
           "action": "feishu.calendar.read",
           "resource_pattern": "calendar:*",
           "constraints": { "max_calls_per_minute": 30 }
+        },
+        {
+          "action": "feishu.docx.read",
+          "resource_pattern": "document_id:*",
+          "constraints": { "max_calls_per_minute": 60 }
         }
       ],
       "delegation": {

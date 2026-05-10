@@ -57,7 +57,15 @@ class AgentServer:
         self.handler = handler
 
     def create_app(self) -> FastAPI:
-        app = FastAPI(title=f"agent:{self.config.agent_id}")
+        # docs_url=None: keep /docs free for app-defined routes (doc_assistant
+        # uses it to serve locally persisted reports). Agents should not expose
+        # Swagger publicly anyway.
+        app = FastAPI(
+            title=f"agent:{self.config.agent_id}",
+            docs_url=None,
+            redoc_url=None,
+            openapi_url=None,
+        )
         # IdP always signs delegated tokens with "agent:<id>" as aud.
         expected_aud = f"agent:{self.config.agent_id}"
 
@@ -74,7 +82,14 @@ class AgentServer:
                 "status": "ok",
                 "agent": self.config.agent_id,
                 "version": "1.0.0",
-                "deps": {"feishu": "mock" if self.config.feishu_mock else "live"},
+                "deps": {
+                    "feishu": (
+                        "mock"
+                        if "feishu-mock" in self.config.feishu_base
+                        or self.config.feishu_base.endswith(":9000")
+                        else "live"
+                    )
+                },
             }
 
         @app.post("/invoke")

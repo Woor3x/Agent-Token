@@ -27,7 +27,7 @@ class TestStructuredIntent:
 
     def test_resource_too_long_raises(self):
         with pytest.raises(IntentError):
-            validate_intent({"action": "web.search", "resource": "a" * 257})
+            validate_intent({"action": "web.search", "resource": "a" * 513})
 
     def test_resource_pattern_invalid(self):
         with pytest.raises(IntentError):
@@ -43,6 +43,27 @@ class TestStructuredIntent:
 
     def test_params_optional(self):
         validate_intent({"action": "web.search", "resource": "*", "params": {"q": "hello"}})
+
+    def test_web_fetch_url_with_query_string(self):
+        # Regression: URLs with ?, =, & must be accepted by the resource
+        # pattern — dispatcher auto-expands web.search → web.fetch and the
+        # latter's resource is the full URL.
+        validate_intent({
+            "action": "web.fetch",
+            "resource": "https://www.reddit.com/r/x/comments/abc/?tl=zh-hans&utm=1",
+        })
+
+    def test_feishu_docx_and_read_all_actions_accepted(self):
+        # New actions added when docx-as-data-source + whole-bitable selection
+        # were wired in must clear the gateway intent schema.
+        validate_intent({
+            "action": "feishu.docx.read",
+            "resource": "document_id:doc_abc123",
+        })
+        validate_intent({
+            "action": "feishu.bitable.read_all",
+            "resource": "app_token:app_abc",
+        })
 
 
 class TestStructuredParser:

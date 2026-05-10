@@ -28,13 +28,17 @@ _PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "planner_sys
 
 _ACTION_ENUM = {
     "feishu.bitable.read",
+    "feishu.bitable.read_all",
     "feishu.contact.read",
     "feishu.calendar.read",
+    "feishu.docx.read",
     "web.search",
     "web.fetch",
     "feishu.doc.write",
 }
-_RESOURCE_RE = re.compile(r"^[a-zA-Z0-9._:/*@-]+$")
+# Allow URL-safe chars in addition to capability-style resource ids — required
+# for ``web.fetch`` tasks whose resource is a full https URL with query string.
+_RESOURCE_RE = re.compile(r"^[A-Za-z0-9._:/*@\-?=&#%~+]+$")
 
 
 def validate_dag(dag: list[dict]) -> None:
@@ -62,10 +66,100 @@ def validate_dag(dag: list[dict]) -> None:
 # out mock identifiers (`bascn_alice/tbl_q1`) that 91402 NOTEXIST upstream.
 
 
-def _default_bitable_resource() -> str:
-    app = os.environ.get("FEISHU_BITABLE_APP_TOKEN") or "bascn_alice"
-    tbl = os.environ.get("FEISHU_BITABLE_TABLE_ID") or "tbl_q1"
-    return f"app_token:{app}/table:{tbl}"
+def _default_bitable_resource(state: dict[str, Any] | None = None) -> str | None:
+    """Resolve bitable resource id from the user's front-end selection.
+
+    Returns ``None`` when no explicit selection — callers must skip emitting
+    a bitable task in that case. We deliberately do **not** fall back to env
+    defaults: the front-end picker is the only source of truth, so the
+    planner never silently reads a stale, env-pinned bitable that the user
+    didn't ask for.
+    """
+    if state:
+        sel = state.get("bitable") or {}
+        app = sel.get("app_token")
+        tbl = sel.get("table_id")
+        if app and tbl:
+            return f"app_token:{app}/table:{tbl}"
+        if app:
+            # Whole-bitable selection — handled via read_all elsewhere; the
+            # legacy single-table resource string isn't applicable here.
+            return None
+    return None
+
+
+def _build_one_source_task(sel: dict, idx: int) -> dict | None:
+    """Convert a single front-end selection to a data-fetch task.
+
+    Three shapes (legacy ``{app_token, table_id}`` accepted as bitable):
+    single-table read, whole-bitable read, and docx read. Returns ``None`` if
+    selection is incomplete.
+    """
+    kind = (sel.get("kind") or "").lower()
+    app = sel.get("app_token")
+    tbl = sel.get("table_id")
+    doc_id = sel.get("document_id")
+
+    if not kind and app:
+        kind = "bitable"
+
+    if kind == "bitable" and app and tbl:
+        return {
+            "id": f"t{idx}", "agent": "data_agent",
+            "action": "feishu.bitable.read",
+            "resource": f"app_token:{app}/table:{tbl}",
+            "params": {"page_size": 100}, "deps": [],
+        }
+    if kind == "bitable" and app:
+        return {
+            "id": f"t{idx}", "agent": "data_agent",
+            "action": "feishu.bitable.read_all",
+            "resource": f"app_token:{app}",
+            "params": {"page_size": 100}, "deps": [],
+        }
+    if kind == "docx" and doc_id:
+        return {
+            "id": f"t{idx}", "agent": "data_agent",
+            "action": "feishu.docx.read",
+            "resource": f"document_id:{doc_id}",
+            "params": {}, "deps": [],
+        }
+    return None
+
+
+def _data_source_tasks(state: dict[str, Any] | None, start_idx: int) -> list[dict]:
+    """Build leading data-fetch tasks from front-end selections.
+
+    Reads ``state['bitables']`` (multi-select list, preferred) or falls back to
+    legacy ``state['bitable']`` singleton. Each valid selection becomes one
+    task, with sequential ids starting at ``start_idx``. Empty/invalid entries
+    are skipped silently — caller falls back to keyword heuristics if the
+    returned list is empty.
+    """
+    if not state:
+        return []
+    raw_list = state.get("bitables")
+    selections: list[dict]
+    if isinstance(raw_list, list):
+        selections = [s for s in raw_list if isinstance(s, dict)]
+    else:
+        legacy = state.get("bitable")
+        selections = [legacy] if isinstance(legacy, dict) else []
+
+    out: list[dict] = []
+    idx = start_idx
+    for sel in selections:
+        task = _build_one_source_task(sel, idx)
+        if task:
+            out.append(task)
+            idx += 1
+    return out
+
+
+def _data_source_task(state: dict[str, Any] | None, idx: int) -> dict | None:
+    """Back-compat shim: returns the first data-source task, if any."""
+    tasks = _data_source_tasks(state, idx)
+    return tasks[0] if tasks else None
 
 
 def _default_contact_dept() -> str | None:
@@ -81,17 +175,30 @@ def _default_calendar_id() -> str | None:
 # ---- rule-based fallback ----------------------------------------------------
 
 
-def _rule_plan(prompt: str) -> list[dict]:
+def _rule_plan(prompt: str, state: dict[str, Any] | None = None) -> list[dict]:
     p = prompt.lower()
     tasks: list[dict] = []
-    if "sales" in p or "q1" in p or "bitable" in p or "销售" in p or "业绩" in p:
-        tasks.append({
-            "id": "t1", "agent": "data_agent",
-            "action": "feishu.bitable.read",
-            "resource": _default_bitable_resource(),
-            "params": {"page_size": 100},
-            "deps": [],
-        })
+    # Front-end picker selections → leading data-fetch tasks (one per source).
+    # Wins over keyword heuristics: when the user explicitly chose docx/bitable
+    # source(s), that's what they want analysed regardless of prompt wording.
+    explicit = _data_source_tasks(state, 1)
+    if explicit:
+        tasks.extend(explicit)
+    elif (
+        "sales" in p or "q1" in p or "bitable" in p
+        or "销售" in p or "业绩" in p
+    ):
+        # Only emit a bitable task when the user explicitly picked one in
+        # state; without a selection we'd be guessing at an app_token.
+        res = _default_bitable_resource(state)
+        if res:
+            tasks.append({
+                "id": "t1", "agent": "data_agent",
+                "action": "feishu.bitable.read",
+                "resource": res,
+                "params": {"page_size": 100},
+                "deps": [],
+            })
     if "team" in p or "member" in p or "sales team" in p or "成员" in p:
         dept = _default_contact_dept()
         if dept:
@@ -132,7 +239,7 @@ def _rule_plan(prompt: str) -> list[dict]:
 # ---- LLM-based path ---------------------------------------------------------
 
 
-def _load_system_prompt() -> str:
+def _load_system_prompt(state: dict[str, Any] | None = None) -> str:
     try:
         raw = _PROMPT_PATH.read_text(encoding="utf-8")
     except OSError:
@@ -140,9 +247,14 @@ def _load_system_prompt() -> str:
             "你是任务规划器，输出 JSON {tasks:[...]}, action 取自固定枚举, "
             "最后一步必须为 doc_assistant.feishu.doc.write。"
         )
-    # Inject env-derived defaults so the LLM stops parroting mock examples
-    # (`bascn_alice`, `department:sales`, …) into real Feishu calls.
-    raw = raw.replace("{{BITABLE_RESOURCE}}", _default_bitable_resource())
+    # Inject the user's front-end pick into the prompt. When no selection,
+    # tell the LLM bitable is off-limits so it stops fabricating tokens.
+    bitable_res = _default_bitable_resource(state)
+    raw = raw.replace(
+        "{{BITABLE_RESOURCE}}",
+        bitable_res if bitable_res
+        else "（用户未选择多维表格 — 禁止生成 feishu.bitable.read / read_all 任务）",
+    )
     dept = _default_contact_dept()
     cal = _default_calendar_id()
     raw = raw.replace(
@@ -176,9 +288,11 @@ def _extract_json(raw: str) -> dict:
         return json.loads(m.group(0))
 
 
-async def _llm_plan(prompt: str, llm: LLMProvider) -> list[dict]:
+async def _llm_plan(
+    prompt: str, llm: LLMProvider, state: dict[str, Any] | None = None
+) -> list[dict]:
     msgs = [
-        ChatMessage(role="system", content=_load_system_prompt()),
+        ChatMessage(role="system", content=_load_system_prompt(state)),
         ChatMessage(role="user", content=prompt),
     ]
     res = await llm.chat(messages=msgs, temperature=0.1, max_tokens=800, json_mode=True)
@@ -203,10 +317,15 @@ async def planner_node(state: dict[str, Any]) -> dict[str, Any]:
     prompt = state.get("user_prompt", "")
     llm: LLMProvider | None = state.get("llm")
 
+    # When the user explicitly multi-selected data sources, force the rule
+    # path: it deterministically emits one fetch task per selection. The LLM
+    # path only knows about a single ``{{BITABLE_RESOURCE}}`` slot.
+    explicit_multi = len(_data_source_tasks(state, 1)) > 1
+
     dag: list[dict] | None = None
-    if llm is not None:
+    if llm is not None and not explicit_multi:
         try:
-            dag = await _llm_plan(prompt, llm)
+            dag = await _llm_plan(prompt, llm, state)
             validate_dag(dag)
             _log.info(f"planner=llm tasks={len(dag)}")
         except (LLMError, ValueError, json.JSONDecodeError) as e:
@@ -214,7 +333,7 @@ async def planner_node(state: dict[str, Any]) -> dict[str, Any]:
             dag = None
 
     if dag is None:
-        dag = _rule_plan(prompt)
+        dag = _rule_plan(prompt, state)
         validate_dag(dag)
         _log.info(f"planner=rule tasks={len(dag)}")
 

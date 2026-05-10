@@ -30,12 +30,31 @@ from services.feishu_mock.main import app as feishu_mock_app
 
 
 def test_planner_rule_plan_sales() -> None:
-    dag = _rule_plan("Summarize Q1 sales of the sales team")
+    # Front-end picks the bitable; planner now requires an explicit selection
+    # (env-default fallback was removed) before emitting a data_agent task.
+    state = {
+        "bitable": {
+            "kind": "bitable",
+            "app_token": "app_test",
+            "table_id": "tbl_test",
+        }
+    }
+    dag = _rule_plan("Summarize Q1 sales of the sales team", state)
     validate_dag(dag)
     agents = [t["agent"] for t in dag]
     # Must include data_agent read + doc_assistant writer
     assert "data_agent" in agents
     assert dag[-1]["action"] == "feishu.doc.write"
+
+
+def test_planner_rule_plan_no_selection_skips_bitable() -> None:
+    # Without a selection, even sales-keyword prompts must not invent a
+    # bitable task — they fall back to web.search instead.
+    dag = _rule_plan("Summarize Q1 sales of the sales team")
+    validate_dag(dag)
+    agents = [t["agent"] for t in dag]
+    assert "data_agent" not in agents
+    assert any(t["action"] == "web.search" for t in dag)
 
 
 def test_planner_rule_plan_fallback_to_search() -> None:
@@ -381,7 +400,14 @@ async def test_orchestrate_end_to_end() -> None:
                 "intent": {
                     "action": "orchestrate",
                     "resource": "plan:auto",
-                    "params": {"prompt": "Summarize Q1 sales from the sales team"},
+                    "params": {
+                        "prompt": "Summarize Q1 sales from the sales team",
+                        "bitable": {
+                            "kind": "bitable",
+                            "app_token": "bascn_alice",
+                            "table_id": "tbl_q1",
+                        },
+                    },
                 }
             },
         )
@@ -394,6 +420,91 @@ async def test_orchestrate_end_to_end() -> None:
     # data_agent returned real mock rows
     data_tid = next(t["id"] for t in non_writer if t["agent"] == "data_agent")
     assert body["results"][data_tid]["count"] == 4
+
+
+# ---------------------- doc_writer local-storage backend ----------------------
+
+
+@pytest.mark.asyncio
+async def test_doc_writer_local_storage_persists_and_reads_back(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("DOC_STORAGE", "local")
+    monkeypatch.setenv("DOC_STORAGE_DIR", str(tmp_path))
+    from agents.doc_assistant import storage
+    from agents.doc_assistant.nodes.doc_writer import doc_writer_node
+
+    state = {
+        "dag": [
+            {"id": "t1", "action": "feishu.doc.write", "params": {"title": "Q1 报告"}}
+        ],
+        "doc_title": "",
+        "blocks": [
+            {"block_type": "heading1", "text": "Q1 报告"},
+            {"block_type": "text", "text": "正文..."},
+        ],
+        "feishu_base": "http://feishu-mock:9000",
+    }
+    out = await doc_writer_node(state)
+    doc = out["doc"]
+    assert doc["storage"] == "local"
+    assert doc["document_id"].startswith("doc_local_")
+    assert doc["url"].startswith("/docs/doc_local_")
+
+    rec = storage.get(doc["document_id"])
+    assert rec is not None
+    assert rec["title"] == "Q1 报告"
+    assert len(rec["blocks"]) == 2
+    listing = storage.list_recent()
+    assert any(d["document_id"] == doc["document_id"] for d in listing)
+
+
+def test_storage_get_rejects_path_traversal(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("DOC_STORAGE_DIR", str(tmp_path))
+    from agents.doc_assistant import storage
+
+    assert storage.get("../etc/passwd") is None
+    assert storage.get("foo/bar") is None
+    assert storage.get("doc_local_unknown") is None
+
+
+@pytest.mark.asyncio
+async def test_files_endpoint_lists_drive(monkeypatch) -> None:
+    """doc_assistant /files proxies tenant-token drive listing for the picker."""
+    from agents.doc_assistant.main import build_app
+    monkeypatch.setenv("FEISHU_BASE", "http://testserver")
+    monkeypatch.setenv("FEISHU_MOCK", "true")
+
+    feishu_transport = httpx.ASGITransport(app=feishu_mock_app)
+    factory = lambda: httpx.AsyncClient(
+        transport=feishu_transport, base_url="http://testserver"
+    )
+    app = build_app({}, client_factory=factory)
+
+    app_transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=app_transport, base_url="http://doc-assistant") as c:
+        r = await c.get("/files")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    tokens = [f["token"] for f in body["files"]]
+    assert "bascn_alice" in tokens
+
+    async with httpx.AsyncClient(transport=app_transport, base_url="http://doc-assistant") as c:
+        r = await c.get("/files/bascn_alice/tables")
+    assert r.status_code == 200
+    table_ids = {t["table_id"] for t in r.json()["tables"]}
+    assert "tbl_q1" in table_ids
+
+
+def test_planner_uses_state_bitable_override() -> None:
+    """When state['bitable'] is set, _rule_plan emits that resource verbatim."""
+    from agents.doc_assistant.nodes.planner import _rule_plan
+    state = {"bitable": {"app_token": "bascn_user_pick", "table_id": "tbl_picked"}}
+    dag = _rule_plan("分析这个", state)
+    bitable_task = next(
+        t for t in dag if t.get("action") == "feishu.bitable.read"
+    )
+    assert bitable_task["resource"] == "app_token:bascn_user_pick/table:tbl_picked"
 
 
 @pytest.mark.asyncio

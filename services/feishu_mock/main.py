@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routes import auth, bitable, calendar, contact, docx
+from .routes import auth, bitable, calendar, contact, docx, drive
 
 
 def create_app() -> FastAPI:
@@ -25,6 +25,7 @@ def create_app() -> FastAPI:
     app.include_router(contact.router)
     app.include_router(calendar.router)
     app.include_router(docx.router)
+    app.include_router(drive.router)
     return app
 
 

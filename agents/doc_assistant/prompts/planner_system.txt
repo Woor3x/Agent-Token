@@ -9,11 +9,13 @@
 约束：
 - id 形如 t1、t2 ...，全 DAG 内唯一，按声明顺序递增。
 - agent ∈ {data_agent, web_agent, doc_assistant}。
-- action ∈ {feishu.bitable.read, feishu.contact.read, feishu.calendar.read, web.search, web.fetch, feishu.doc.write}。
+- action ∈ {feishu.bitable.read, feishu.bitable.read_all, feishu.contact.read, feishu.calendar.read, feishu.docx.read, web.search, web.fetch, feishu.doc.write}。
 - resource 必须匹配正则 ^[a-zA-Z0-9._:/*@-]+$。常见格式：
-    feishu.bitable.read   → app_token:<APP>/table:<TBL>
-    feishu.contact.read   → department:<DEPT>
-    feishu.calendar.read  → calendar:<CAL>
+    feishu.bitable.read       → app_token:<APP>/table:<TBL>
+    feishu.bitable.read_all   → app_token:<APP>      （读整个多维表所有 table）
+    feishu.contact.read       → department:<DEPT>
+    feishu.calendar.read      → calendar:<CAL>
+    feishu.docx.read          → document_id:<DOC>
     web.search            → "*"（具体 query 走 params.query）
     web.fetch             → 完整 https URL
     feishu.doc.write      → doc_token:auto

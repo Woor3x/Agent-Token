@@ -9,8 +9,10 @@ INTENT_SCHEMA: dict = {
             "type": "string",
             "enum": [
                 "feishu.bitable.read",
+                "feishu.bitable.read_all",
                 "feishu.contact.read",
                 "feishu.calendar.read",
+                "feishu.docx.read",
                 "feishu.doc.write",
                 "web.search",
                 "web.fetch",
@@ -18,10 +20,15 @@ INTENT_SCHEMA: dict = {
                 "orchestrate",
             ],
         },
+        # Resource pattern needs to fit two shapes:
+        #   - capability resources e.g. ``app_token:foo/table:bar``
+        #   - URLs for ``web.fetch`` e.g. ``https://x.y/z?a=b&c=d``
+        # Allow URL-safe RFC3986 chars (unreserved + sub-delims + %, ?, =, &, #).
+        # Spaces and control chars still rejected.
         "resource": {
             "type": "string",
-            "maxLength": 256,
-            "pattern": r"^[a-zA-Z0-9._:/*@\-]+$",
+            "maxLength": 512,
+            "pattern": r"^[A-Za-z0-9._:/*@\-?=&#%~+]+$",
         },
         "params": {"type": "object"},
     },

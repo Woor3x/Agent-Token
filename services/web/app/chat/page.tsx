@@ -3,8 +3,16 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getAccessToken } from "@/lib/auth";
-import { sendChat } from "@/lib/api";
+import {
+  sendChat,
+  listDriveFiles,
+  listBitableTables,
+  type DriveFile,
+  type BitableTable,
+  type BitableSelection,
+} from "@/lib/api";
 import type { ChatResponse, DagTask } from "@/types";
+import Markdown from "@/components/Markdown";
 
 interface Message {
   role: "user" | "agent";
@@ -14,9 +22,17 @@ interface Message {
 }
 
 function extractContent(resp: ChatResponse): string {
-  // Prefer explicit doc content string
+  // Prefer explicit doc content string (legacy shape).
   if (typeof resp.doc === "string" && resp.doc) return resp.doc;
-  // Gather content/title from dag task params
+  // Local-storage doc: render a short summary line; the full content lives at
+  // /docs/{id} and is reachable via the "文档查看 →" link below.
+  if (resp.doc && typeof resp.doc === "object" && "document_id" in resp.doc) {
+    const d = resp.doc;
+    const title = d.title ?? "(无标题)";
+    const sections = typeof d.block_count === "number" ? ` · ${d.block_count} 段` : "";
+    return `# ${title}\n\n✅ 文档已生成${sections}。点击下方「文档查看 →」打开完整报告。`;
+  }
+  // Fallback: gather title/content from dag task params (legacy planner shape).
   const parts: string[] = [];
   for (const task of (resp.dag ?? []) as DagTask[]) {
     const p = task.params ?? {};
@@ -40,6 +56,19 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [files, setFiles] = useState<DriveFile[] | null>(null);
+  const [tables, setTables] = useState<BitableTable[] | null>(null);
+  const [pickedFile, setPickedFile] = useState<DriveFile | null>(null);
+  // Multi-select: each entry is one data source the user chose. Selections
+  // accumulate across picker interactions; the picker only closes on explicit
+  // 完成/× actions, not on each pick.
+  const [bitables, setBitables] = useState<BitableSelection[]>([]);
+  const [pickerErr, setPickerErr] = useState<string | null>(null);
+  // breadcrumb of folder tokens we've descended into (root = "")
+  const [folderStack, setFolderStack] = useState<{ token: string; name: string }[]>([
+    { token: "", name: "根目录" },
+  ]);
 
   // auth check only on mount — don't put router in deps to avoid re-running on every navigation
   useEffect(() => {
@@ -50,15 +79,33 @@ export default function ChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  function selLabel(s: BitableSelection): string {
+    if (s.name) return s.name;
+    if (s.document_id) return s.document_id;
+    if (s.app_token) {
+      return `${s.app_token}${s.table_id ? "/" + s.table_id : " (整选)"}`;
+    }
+    return "?";
+  }
+
   async function submit() {
     const prompt = input.trim();
     if (!prompt || loading) return;
     setInput("");
-    setMessages((m) => [...m, { role: "user", text: prompt }]);
+    const sourcesLine =
+      bitables.length > 0
+        ? bitables.map((b) => `📊 ${selLabel(b)}`).join("\n") + "\n"
+        : "";
+    setMessages((m) => [
+      ...m,
+      { role: "user", text: `${sourcesLine}${prompt}` },
+    ]);
     setLoading(true);
 
     try {
-      const resp = await sendChat(prompt);
+      const resp = await sendChat(prompt, {
+        bitables: bitables.length > 0 ? bitables : undefined,
+      });
       setMessages((m) => [
         ...m,
         { role: "agent", text: extractContent(resp), response: resp },
@@ -73,8 +120,89 @@ export default function ChatPage() {
     }
   }
 
+  async function loadFolder(token: string) {
+    setFiles(null);
+    setPickerErr(null);
+    try {
+      // include both bitable and docx so the user can pick either as a data source
+      setFiles(await listDriveFiles(token, "bitable,docx"));
+    } catch (e) {
+      setPickerErr(String(e));
+    }
+  }
+
+  async function openPicker() {
+    setPickerOpen(true);
+    setPickerErr(null);
+    setTables(null);
+    setPickedFile(null);
+    setFolderStack([{ token: "", name: "根目录" }]);
+    await loadFolder("");
+  }
+
+  async function enterFolder(f: DriveFile) {
+    setFolderStack((s) => [...s, { token: f.token, name: f.name }]);
+    await loadFolder(f.token);
+  }
+
+  async function popFolder(idx: number) {
+    const next = folderStack.slice(0, idx + 1);
+    setFolderStack(next);
+    await loadFolder(next[next.length - 1].token);
+  }
+
+  // Multi-select helpers: ``addSel`` dedupes by (kind, app_token, table_id,
+  // document_id) so accidentally clicking the same item twice is a no-op
+  // instead of producing duplicate fetch tasks downstream.
+  function addSel(s: BitableSelection) {
+    const key = (x: BitableSelection) =>
+      `${x.kind ?? ""}|${x.app_token ?? ""}|${x.table_id ?? ""}|${x.document_id ?? ""}`;
+    const k = key(s);
+    setBitables((cur) => (cur.some((c) => key(c) === k) ? cur : [...cur, s]));
+  }
+
+  function removeSel(idx: number) {
+    setBitables((cur) => cur.filter((_, i) => i !== idx));
+  }
+
+  // Click on a bitable card → drill into its tables for sub-table picking.
+  // Docx: nothing to drill into; add it to the selection list directly.
+  async function pickFile(f: DriveFile) {
+    if (f.type === "docx") {
+      addSel({ kind: "docx", document_id: f.token, name: f.name });
+      return;
+    }
+    setPickedFile(f);
+    setPickerErr(null);
+    setTables(null);
+    try {
+      setTables(await listBitableTables(f.token));
+    } catch (e) {
+      setPickerErr(String(e));
+    }
+  }
+
+  // "Select the whole bitable" — analyse all tables under one app_token.
+  function pickWholeBitable(f: DriveFile) {
+    addSel({ kind: "bitable", app_token: f.token, name: f.name });
+  }
+
+  function pickTable(t: BitableTable) {
+    if (!pickedFile) return;
+    addSel({
+      kind: "bitable",
+      app_token: pickedFile.token,
+      table_id: t.table_id,
+      name: `${pickedFile.name} / ${t.name}`,
+    });
+    // Drop back to the file list so the user can pick another source if they
+    // want — closing only happens via the explicit 完成/× buttons.
+    setPickedFile(null);
+    setTables(null);
+  }
+
   return (
-    <div className="flex flex-col h-full max-w-3xl mx-auto px-4 py-4 gap-4">
+    <div className="flex flex-col h-full max-w-5xl mx-auto px-4 py-4 gap-4">
       <div className="flex-1 overflow-y-auto space-y-3 min-h-0">
         {messages.length === 0 && (
           <div className="text-center text-slate-400 text-sm mt-20">
@@ -113,10 +241,10 @@ export default function ChatPage() {
                       </svg>
                       <span className="text-xs font-medium text-slate-500">生成文档</span>
                     </div>
-                    <div className={`whitespace-pre-wrap text-slate-700 leading-relaxed ${
-                      expanded === i ? "" : "line-clamp-6"
+                    <div className={`text-slate-700 leading-relaxed ${
+                      expanded === i ? "" : "max-h-[18rem] overflow-hidden"
                     }`}>
-                      {msg.text}
+                      <Markdown>{msg.text}</Markdown>
                     </div>
                     {msg.text.split("\n").length > 6 && (
                       <button
@@ -166,12 +294,50 @@ export default function ChatPage() {
         <div ref={bottomRef} />
       </div>
 
+      {/* Selected-file chips (multi) + picker trigger */}
+      <div className="flex items-center gap-2 shrink-0 text-xs flex-wrap">
+        <button
+          onClick={openPicker}
+          className="px-2 py-1 rounded-md border border-slate-300 hover:bg-slate-50 text-slate-700"
+        >
+          📊 选择数据源{bitables.length > 0 ? `（已选 ${bitables.length}）` : ""}
+        </button>
+        {bitables.map((b, i) => (
+          <span
+            key={`${b.kind ?? ""}|${b.app_token ?? ""}|${b.table_id ?? ""}|${b.document_id ?? ""}|${i}`}
+            className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border ${
+              b.kind === "docx"
+                ? "bg-violet-50 border-violet-200 text-violet-700"
+                : "bg-emerald-50 border-emerald-200 text-emerald-700"
+            }`}
+          >
+            <span>{b.kind === "docx" ? "📄" : b.table_id ? "📊" : "📊✓"}</span>
+            <span>{selLabel(b)}</span>
+            <button
+              onClick={() => removeSel(i)}
+              className="hover:text-slate-900"
+              aria-label="remove selection"
+            >×</button>
+          </span>
+        ))}
+        {bitables.length > 1 && (
+          <button
+            onClick={() => setBitables([])}
+            className="text-slate-400 hover:text-slate-600 underline"
+          >清空</button>
+        )}
+      </div>
+
       <div className="flex gap-2 shrink-0">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && submit()}
-          placeholder="输入你的需求…"
+          placeholder={
+            bitables.length > 0
+              ? `对 ${bitables.length} 个数据源提问…`
+              : "输入你的需求…"
+          }
           className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
           disabled={loading}
         />
@@ -183,6 +349,181 @@ export default function ChatPage() {
           发送
         </button>
       </div>
+
+      {/* File picker modal */}
+      {pickerOpen && (
+        <div
+          className="fixed inset-0 bg-black/30 flex items-center justify-center z-50"
+          onClick={() => setPickerOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col"
+          >
+            <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-2 flex-wrap">
+              {pickedFile && (
+                <button
+                  onClick={() => { setPickedFile(null); setTables(null); }}
+                  className="text-slate-400 hover:text-slate-600 text-sm"
+                >←</button>
+              )}
+              {pickedFile ? (
+                <h2 className="font-medium text-slate-700">
+                  选择表格 — {pickedFile.name}
+                </h2>
+              ) : (
+                <div className="flex items-center gap-1 text-sm">
+                  {folderStack.map((f, i) => (
+                    <span key={i} className="flex items-center gap-1">
+                      <button
+                        onClick={() => popFolder(i)}
+                        disabled={i === folderStack.length - 1}
+                        className={i === folderStack.length - 1
+                          ? "font-medium text-slate-700"
+                          : "text-blue-600 hover:underline"}
+                      >{f.name}</button>
+                      {i < folderStack.length - 1 && <span className="text-slate-300">/</span>}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={() => setPickerOpen(false)}
+                  className="px-3 py-1 rounded-md text-sm bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40"
+                  disabled={bitables.length === 0}
+                  title={bitables.length === 0 ? "请先选择至少一个数据源" : ""}
+                >
+                  完成{bitables.length > 0 ? `（${bitables.length}）` : ""}
+                </button>
+                <button
+                  onClick={() => setPickerOpen(false)}
+                  className="text-slate-400 hover:text-slate-600"
+                  aria-label="close"
+                >×</button>
+              </div>
+            </div>
+            <div className="overflow-y-auto p-4 flex-1">
+              {pickerErr && (
+                <div className="bg-red-50 border border-red-200 text-red-600 text-xs rounded px-3 py-2 mb-3">
+                  {pickerErr}
+                </div>
+              )}
+              {!pickedFile && files === null && !pickerErr && (
+                <div className="text-slate-400 text-sm">加载中…</div>
+              )}
+              {!pickedFile && files && files.length === 0 && (
+                <div className="text-slate-500 text-sm space-y-2">
+                  <div>未找到多维表格文件。</div>
+                  <div className="text-xs text-slate-400">
+                    若连接的是真飞书，请检查应用是否拥有
+                    <code className="mx-1 px-1 bg-slate-100 rounded text-[11px]">drive:drive.metadata:readonly</code>
+                    与
+                    <code className="mx-1 px-1 bg-slate-100 rounded text-[11px]">bitable:app:readonly</code>
+                    权限，且租户内至少存在一个该应用可见的多维表格。
+                  </div>
+                </div>
+              )}
+              {!pickedFile && files && files.length > 0 && (
+                <ul className="space-y-1">
+                  {files.map((f) => {
+                    const isFolder = f.type === "folder";
+                    const isBitable = f.type === "bitable";
+                    const isDocx = f.type === "docx";
+                    const icon = isFolder ? "📁" : isBitable ? "📊" : isDocx ? "📄" : "📎";
+                    const hover = isFolder
+                      ? "hover:bg-amber-50"
+                      : isDocx
+                      ? "hover:bg-violet-50"
+                      : "hover:bg-blue-50";
+                    // Already-selected indicators: docx matches by document_id;
+                    // whole-bitable matches by app_token without table_id.
+                    const docxSelected =
+                      isDocx && bitables.some(
+                        (b) => b.kind === "docx" && b.document_id === f.token
+                      );
+                    const wholeSelected =
+                      isBitable && bitables.some(
+                        (b) => b.kind === "bitable" && b.app_token === f.token && !b.table_id
+                      );
+                    const subSelectedCount = isBitable
+                      ? bitables.filter(
+                          (b) => b.kind === "bitable" && b.app_token === f.token && !!b.table_id
+                        ).length
+                      : 0;
+                    return (
+                      <li key={f.token} className="flex items-stretch gap-1">
+                        <button
+                          onClick={() => isFolder ? enterFolder(f) : pickFile(f)}
+                          className={`flex-1 text-left px-3 py-2 rounded-lg text-sm text-slate-700 flex items-start gap-2 ${hover}`}
+                        >
+                          <span className="text-base">{icon}</span>
+                          <span className="flex-1 min-w-0">
+                            <div className="font-medium truncate flex items-center gap-1">
+                              {f.name}
+                              {docxSelected && <span className="text-violet-600 text-xs">✓ 已选</span>}
+                              {wholeSelected && <span className="text-emerald-600 text-xs">✓ 整选</span>}
+                              {subSelectedCount > 0 && (
+                                <span className="text-emerald-600 text-xs">✓ {subSelectedCount} 表</span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-400 font-mono truncate">{f.token}</div>
+                          </span>
+                          {isFolder && <span className="text-slate-300">›</span>}
+                          {isBitable && <span className="text-xs text-slate-400 self-center">选表 ›</span>}
+                        </button>
+                        {isBitable && (
+                          <button
+                            onClick={() => pickWholeBitable(f)}
+                            disabled={wholeSelected}
+                            title="不细选，整个多维表所有 table 都参与分析"
+                            className="px-2 rounded-lg text-xs text-emerald-700 hover:bg-emerald-50 border border-emerald-200 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            {wholeSelected ? "✓ 已加入" : "✓ 整选"}
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {pickedFile && tables === null && !pickerErr && (
+                <div className="text-slate-400 text-sm">加载表格中…</div>
+              )}
+              {pickedFile && tables && tables.length > 0 && (
+                <ul className="space-y-1">
+                  {tables.map((t) => {
+                    const selected = bitables.some(
+                      (b) =>
+                        b.kind === "bitable" &&
+                        b.app_token === pickedFile.token &&
+                        b.table_id === t.table_id
+                    );
+                    return (
+                      <li key={t.table_id}>
+                        <button
+                          onClick={() => pickTable(t)}
+                          disabled={selected}
+                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-emerald-50 text-sm text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                          <span className="flex-1 min-w-0">
+                            <div className="font-medium truncate">{t.name || t.table_id}</div>
+                            <div className="text-xs text-slate-400 font-mono truncate">{t.table_id}</div>
+                          </span>
+                          {selected && <span className="text-emerald-600 text-xs">✓ 已选</span>}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {pickedFile && tables && tables.length === 0 && (
+                <div className="text-slate-400 text-sm">该多维表格没有可选表</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

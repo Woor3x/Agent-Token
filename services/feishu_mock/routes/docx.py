@@ -67,6 +67,25 @@ async def get_document(document_id: str) -> dict:
     }
 
 
+@router.get("/open-apis/docx/v1/documents/{document_id}/blocks")
+async def list_blocks(document_id: str, page_size: int = 500) -> dict:
+    """Mock the real Feishu Docx blocks-list endpoint.
+
+    The mock store keeps blocks in shorthand ``{block_type, text}``; the real
+    Feishu shape is heavier (typed ``elements``). Tests + the data_agent
+    docx.read implementation handle both shapes via :func:`docx._block_to_text`.
+    """
+    doc = DOC_STORE.get(document_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="document not found")
+    items = list(doc.get("blocks", []))[:page_size]
+    return {
+        "code": 0,
+        "msg": "success",
+        "data": {"items": items, "has_more": False},
+    }
+
+
 @router.get("/open-apis/docx/v1/documents")
 async def list_documents() -> dict:
     docs = [

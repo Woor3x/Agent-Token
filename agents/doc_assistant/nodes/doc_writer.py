@@ -1,16 +1,16 @@
-"""doc_writer node: call Feishu docx OpenAPI via DocAssistant's own write token.
+"""doc_writer node: persist the synthesized doc.
 
-Two HTTP shapes coexist:
+Three back-ends coexist, picked from ``DOC_STORAGE``:
 
-* **Mock** (``feishu-mock`` / ``testserver`` / localhost): the legacy
-  ``/blocks/batch_update`` shape with raw block dicts. Kept verbatim so the
-  in-process ASGI tests keep passing.
-* **Real Feishu / Lark Open Platform**: the documented
+* ``local`` (default) — JSON file under :mod:`agents.doc_assistant.storage`.
+  Web UI fetches via ``GET /docs/{id}`` on doc_assistant. Default because
+  user-space Docx URLs are not readable by the front-end without OAuth user
+  scope; tenant-token-created docs return 403 from the user's browser.
+* ``feishu-mock`` (when ``FEISHU_BASE`` looks like a mock host) — legacy
+  ``/blocks/batch_update`` shape, kept so in-process ASGI tests pass.
+* ``feishu`` (real Open Platform) — the documented
   ``/blocks/{root_block_id}/children`` endpoint with the structured
   ``elements`` payload (see :mod:`_feishu_blocks`).
-
-Routing is decided per-call from ``base`` so a deployment can flip between
-the two by editing only ``FEISHU_BASE``.
 """
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ import httpx
 from agents.common.logging import get_logger
 from agents.data_agent.feishu.oauth import FeishuOAuth
 
+from .. import storage
 from ._feishu_blocks import to_feishu_children
 
 _log = get_logger("agents.doc_assistant.doc_writer")
@@ -148,9 +149,6 @@ async def _create_and_write(
 
 
 async def doc_writer_node(state: dict[str, Any]) -> dict[str, Any]:
-    base = state["feishu_base"]
-    oauth: FeishuOAuth = state.get("feishu_oauth") or FeishuOAuth(base=base)
-    factory = state.get("client_factory") or (lambda: httpx.AsyncClient(timeout=10.0))
     # Prefer the synthesizer-derived title (LLM picks one from the user prompt);
     # fall back to whatever the planner stuffed into the doc.write task params;
     # final fallback keeps a sane Chinese default.
@@ -159,6 +157,29 @@ async def doc_writer_node(state: dict[str, Any]) -> dict[str, Any]:
          for t in state["dag"] if t.get("action") == "feishu.doc.write"),
         "执行报告",
     )
+    blocks = state.get("blocks") or []
+
+    # Per-request override > env. Default branches to local storage so the
+    # front-end can render the doc without Feishu user-scope OAuth.
+    storage_mode = (state.get("doc_storage") or os.environ.get("DOC_STORAGE", "local")).lower()
+    if storage_mode == "local":
+        record = storage.save(title=title, blocks=blocks)
+        return {
+            **state,
+            "doc": {
+                "document_id": record["document_id"],
+                "url": f"/docs/{record['document_id']}",
+                "storage": "local",
+                # Surface title + block count so chat UI can render a useful
+                # summary line instead of falling back to "任务完成（无文档输出）".
+                "title": title,
+                "block_count": len(blocks),
+            },
+        }
+
+    base = state["feishu_base"]
+    oauth: FeishuOAuth = state.get("feishu_oauth") or FeishuOAuth(base=base)
+    factory = state.get("client_factory") or (lambda: httpx.AsyncClient(timeout=10.0))
     folder_token = state.get("feishu_folder_token") or os.environ.get(
         "FEISHU_DOCX_FOLDER_TOKEN", ""
     )
@@ -168,8 +189,9 @@ async def doc_writer_node(state: dict[str, Any]) -> dict[str, Any]:
             base=base,
             token=token,
             title=title,
-            blocks=state.get("blocks") or [],
+            blocks=blocks,
             folder_token=folder_token,
             client=c,
         )
+    out["storage"] = "feishu"
     return {**state, "doc": out}

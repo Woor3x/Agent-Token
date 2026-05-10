@@ -42,11 +42,10 @@ ARK_MODEL=ep-2026xxxx-xxxxx    # endpoint id 或公开模型名（doubao-seed-1-
 FEISHU_BASE=http://feishu-mock:9000          # 改 https://open.feishu.cn 即接真飞书
 FEISHU_APP_ID=cli_xxxxxxxxxxxxxxxx
 FEISHU_APP_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-FEISHU_BITABLE_APP_TOKEN=xxxxxxxx            # /base/<APP> 抠
-FEISHU_BITABLE_TABLE_ID=tblxxxxxxxxxxxxxx
+FEISHU_SHARED_ROOT_FOLDER=                   # 必填：picker 根目录（bot 是 collaborator 的 folder token）
 FEISHU_CONTACT_DEPT_ID=                      # 留空 planner 自动 skip 通讯录任务
 FEISHU_CALENDAR_ID=                          # 留空 planner 自动 skip 日程任务
-FEISHU_DOCX_FOLDER_TOKEN=                    # 强烈建议填，避免 tenant_token 写 root drive 403
+FEISHU_DOCX_FOLDER_TOKEN=                    # 仅 DOC_STORAGE=feishu 时生效；避免 tenant_token 写 root drive 403
 ```
 
 真飞书前置：飞书应用后台勾权限 `bitable:app:readonly` + `docx:document` + 按需 `contact:user.base:readonly` + `calendar:calendar:readonly`，**发布版本审核通过**才生效。

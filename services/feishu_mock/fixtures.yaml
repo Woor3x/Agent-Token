@@ -58,6 +58,37 @@ contact:
         email: "carol@acme.com"
         department: "engineering"
 
+drive:
+  root:
+    files:
+      - token: "bascn_alice"
+        name: "Q1/Q2 销售数据"
+        type: "bitable"
+        url: "https://feishu.cn/base/bascn_alice"
+        modified_time: 1759200000
+      - token: "bascn_other"
+        name: "市场调研结果"
+        type: "bitable"
+        url: "https://feishu.cn/base/bascn_other"
+        modified_time: 1758500000
+      - token: "doccnxxxx"
+        name: "OKR 2026"
+        type: "doc"
+        url: "https://feishu.cn/docs/doccnxxxx"
+        modified_time: 1759000000
+
+# Used by /open-apis/bitable/v1/apps/{app_token}/tables — exposes the table_id
+# list for each bitable so the UI can prompt the user to pick a sheet.
+bitable_tables:
+  bascn_alice:
+    - table_id: "tbl_q1"
+      name: "Q1 销售明细"
+    - table_id: "tbl_q2"
+      name: "Q2 销售明细"
+  bascn_other:
+    - table_id: "tbl_market"
+      name: "市场调研"
+
 calendar:
   cal_team:
     events:

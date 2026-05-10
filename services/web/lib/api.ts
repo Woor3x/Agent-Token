@@ -19,14 +19,42 @@ function adminBearerHeaders(): HeadersInit {
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
 
-export async function sendChat(prompt: string, timeoutMs = 120_000): Promise<ChatResponse> {
+/**
+ * Data-source selection sent up via /chat. Three shapes:
+ *   - bitable + specific table:  {kind:"bitable", app_token, table_id}
+ *   - bitable whole app:         {kind:"bitable", app_token}            (table_id omitted)
+ *   - docx document:             {kind:"docx", document_id}
+ * Backward-compat: legacy callers may still send {app_token, table_id} with no
+ * `kind` field — the planner treats that as kind:"bitable".
+ */
+export interface BitableSelection {
+  kind?: "bitable" | "docx";
+  app_token?: string;
+  table_id?: string;
+  document_id?: string;
+  name?: string;
+}
+
+export async function sendChat(
+  prompt: string,
+  opts: {
+    bitable?: BitableSelection;
+    bitables?: BitableSelection[];
+    timeoutMs?: number;
+  } = {}
+): Promise<ChatResponse> {
+  const timeoutMs = opts.timeoutMs ?? 120_000;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    const body: Record<string, unknown> = { prompt };
+    // Multi-select preferred; back-compat singleton kept for older callers.
+    if (opts.bitables && opts.bitables.length > 0) body.bitables = opts.bitables;
+    else if (opts.bitable) body.bitable = opts.bitable;
     const resp = await fetch(`${DOC_ASSISTANT}/chat`, {
       method: "POST",
       headers: userBearerHeaders(),
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify(body),
       signal: controller.signal,
     });
     if (!resp.ok) {
@@ -43,7 +71,11 @@ export async function sendChat(prompt: string, timeoutMs = 120_000): Promise<Cha
   }
 }
 
-// ── Feishu mock docs ──────────────────────────────────────────────────────────
+// ── Generated docs ────────────────────────────────────────────────────────────
+// doc_assistant persists synthesized reports locally under DOC_STORAGE=local
+// (the default) and serves them via GET /docs/{id}. Feishu Docx URLs are no
+// longer used for the UI's render path because tenant-token-created docs
+// can't be fetched by the user's browser without OAuth user scope.
 
 export interface FeishuBlock {
   block_type: string;
@@ -57,7 +89,17 @@ export interface FeishuDoc {
   blocks: FeishuBlock[];
 }
 
+function isLocalDocId(id: string): boolean {
+  return id.startsWith("doc_local_");
+}
+
 export async function getFeishuDoc(docId: string): Promise<FeishuDoc> {
+  if (isLocalDocId(docId)) {
+    const resp = await fetch(`${DOC_ASSISTANT}/docs/${docId}`);
+    if (!resp.ok) throw new Error(`doc not found: ${resp.status}`);
+    return resp.json();
+  }
+  // Fallback: legacy Feishu mock path (kept so older trace links still resolve).
   const resp = await fetch(`${FEISHU}/open-apis/docx/v1/documents/${docId}`);
   if (!resp.ok) throw new Error(`doc not found: ${resp.status}`);
   const body = await resp.json();
@@ -65,10 +107,49 @@ export async function getFeishuDoc(docId: string): Promise<FeishuDoc> {
 }
 
 export async function listFeishuDocs(): Promise<FeishuDoc[]> {
-  const resp = await fetch(`${FEISHU}/open-apis/docx/v1/documents`);
+  const resp = await fetch(`${DOC_ASSISTANT}/docs`);
   if (!resp.ok) throw new Error(`list docs failed: ${resp.status}`);
   const body = await resp.json();
-  return body.data.documents;
+  return body.documents;
+}
+
+// ── Drive picker ──────────────────────────────────────────────────────────────
+// Lists user-accessible bitables / tables so the chat UI can ask the user
+// which sheet to analyse. Backed by doc_assistant /files endpoint, which in
+// turn proxies to Feishu (mock or real Open Platform) using the agent's
+// tenant token.
+
+export interface DriveFile {
+  token: string;     // app_token for bitable
+  name: string;
+  type: string;
+  url: string;
+  modified_time: number;
+}
+
+export interface BitableTable {
+  table_id: string;
+  name: string;
+}
+
+export async function listDriveFiles(folder = "", fileType = ""): Promise<DriveFile[]> {
+  // Empty fileType → backend default "bitable" (folders are kept regardless
+  // so the picker can drill in). Pass "any" to skip filtering entirely.
+  const params = new URLSearchParams();
+  if (folder) params.set("folder", folder);
+  if (fileType) params.set("file_type", fileType);
+  const qs = params.toString() ? `?${params}` : "";
+  const resp = await fetch(`${DOC_ASSISTANT}/files${qs}`);
+  if (!resp.ok) throw new Error(`list files failed: ${resp.status}`);
+  const body = await resp.json();
+  return body.files ?? [];
+}
+
+export async function listBitableTables(appToken: string): Promise<BitableTable[]> {
+  const resp = await fetch(`${DOC_ASSISTANT}/files/${appToken}/tables`);
+  if (!resp.ok) throw new Error(`list tables failed: ${resp.status}`);
+  const body = await resp.json();
+  return body.tables ?? [];
 }
 
 // ── Audit ─────────────────────────────────────────────────────────────────────

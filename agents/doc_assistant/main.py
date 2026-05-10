@@ -30,6 +30,9 @@ from agents.common.logging import setup_logging
 from agents.common.server import AgentServer
 from agents.common.ulid import new_ulid
 
+from agents.data_agent.feishu import drive as feishu_drive
+
+from . import storage
 from .graph import run_graph
 from .handler import DocAssistantHandler
 from .sdk import AsgiSdkClient, HttpSdkClient
@@ -81,12 +84,14 @@ def build_app(
     peer_apps: dict[str, Any] | None = None,
     *,
     llm: LLMProvider | None = None,
+    client_factory: Any | None = None,
 ):
     config = AgentConfig.load("doc_assistant", _CAP_PATH)
     cap = load_capability(_CAP_PATH)
     handler = DocAssistantHandler(
         feishu_base=config.feishu_base,
         peer_apps=peer_apps or {},
+        client_factory=client_factory,
         llm=llm if llm is not None else make_llm(),
     )
     app = AgentServer(config=config, capability=cap, handler=handler).create_app()
@@ -158,6 +163,31 @@ def build_app(
         else:
             sdk = AsgiSdkClient(apps=peer_apps or {}, user_sub=user_sub)
 
+        # Front-end submits picker selections under one of:
+        #   - ``bitables``: list of selections (multi-select; preferred)
+        #   - ``bitable``: legacy single selection (back-compat)
+        # Each selection is one of three shapes accepted by the planner:
+        #   {kind:"bitable", app_token, table_id}    — pinpoint a table
+        #   {kind:"bitable", app_token}              — whole bitable (all tables)
+        #   {kind:"docx", document_id}               — read a docx as data
+        # Legacy ``{app_token, table_id}`` (no ``kind``) is treated as bitable.
+        def _valid_sel(s: Any) -> bool:
+            if not isinstance(s, dict):
+                return False
+            kind = (s.get("kind") or "").lower()
+            if kind == "docx":
+                return bool(s.get("document_id"))
+            if kind == "bitable" or (not kind and s.get("app_token")):
+                return bool(s.get("app_token"))
+            return False
+
+        raw_list = body.get("bitables")
+        if isinstance(raw_list, list):
+            bitables_sel: list[dict] = [s for s in raw_list if _valid_sel(s)]
+        else:
+            legacy = body.get("bitable")
+            bitables_sel = [legacy] if _valid_sel(legacy) else []
+
         state: dict[str, Any] = {
             "user_prompt": prompt,
             "user_token": token_str,
@@ -168,6 +198,11 @@ def build_app(
             "feishu_oauth": handler._oauth,
             "client_factory": handler._client_factory,
             "llm": handler._llm,
+            # Back-compat: keep singleton key populated from first selection so
+            # nodes that still read ``state['bitable']`` (e.g. LLM-prompt
+            # template) see a sensible value.
+            "bitable": bitables_sel[0] if bitables_sel else None,
+            "bitables": bitables_sel,
         }
 
         try:
@@ -186,6 +221,75 @@ def build_app(
             "results": final.get("results", {}),
             "doc": final.get("doc"),
         })
+
+    # ------------------------------------------------------------------
+    # Local document store endpoints — wired to the same JSON store the
+    # doc_writer node persists into when ``DOC_STORAGE=local``. No auth
+    # by design: docs are keyed by ulid (effectively unguessable) and the
+    # front-end fetches them via the same gateway-less proxy as other
+    # internal services. Tighten with a Bearer check once the front-end
+    # gains its own session middleware.
+    @app.get("/docs")
+    async def list_docs() -> JSONResponse:
+        return JSONResponse({"documents": storage.list_recent()})
+
+    @app.get("/docs/{doc_id}")
+    async def get_doc(doc_id: str) -> JSONResponse:
+        rec = storage.get(doc_id)
+        if rec is None:
+            return JSONResponse(
+                status_code=404,
+                content={"error": {"code": "NOT_FOUND", "message": "doc not found"}},
+            )
+        return JSONResponse(rec)
+
+    # ------------------------------------------------------------------
+    # Feishu drive picker — drives the front-end file selector so the user
+    # picks which bitable to analyse instead of pinning IDs in env. Backed
+    # directly by tenant token (same path doc_writer used to take); no
+    # cross-agent SDK hop needed for read-only listing.
+    @app.get("/files")
+    async def list_drive_files(folder: str = "", file_type: str = "bitable") -> JSONResponse:
+        # When no folder is given, default to the env-configured "shared root"
+        # — bots can't enumerate "shared with me" via /drive/v1/files (it lists
+        # the bot's own drive root only). User grants bot collaborator access
+        # on a folder, puts its token in FEISHU_SHARED_ROOT_FOLDER, and the
+        # picker lands there by default.
+        effective_folder = folder or os.environ.get("FEISHU_SHARED_ROOT_FOLDER", "").strip() or None
+        try:
+            async with handler._client_factory() as c:
+                token = await handler._oauth.get_tenant_token(client=c)
+                items = await feishu_drive.list_files(
+                    base=handler._feishu_base,
+                    token=token,
+                    folder_token=effective_folder,
+                    file_type=file_type,
+                    client=c,
+                )
+        except Exception as exc:
+            return JSONResponse(
+                status_code=502,
+                content={"error": {"code": "FEISHU_ERROR", "message": str(exc)}},
+            )
+        return JSONResponse({"files": items, "count": len(items)})
+
+    @app.get("/files/{app_token}/tables")
+    async def list_app_tables(app_token: str) -> JSONResponse:
+        try:
+            async with handler._client_factory() as c:
+                token = await handler._oauth.get_tenant_token(client=c)
+                items = await feishu_drive.list_bitable_tables(
+                    base=handler._feishu_base,
+                    token=token,
+                    app_token=app_token,
+                    client=c,
+                )
+        except Exception as exc:
+            return JSONResponse(
+                status_code=502,
+                content={"error": {"code": "FEISHU_ERROR", "message": str(exc)}},
+            )
+        return JSONResponse({"tables": items, "count": len(items)})
 
     return app
 

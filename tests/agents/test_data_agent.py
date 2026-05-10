@@ -120,6 +120,42 @@ async def test_scope_exceeded(data_agent_app) -> None:
 
 
 @pytest.mark.asyncio
+async def test_drive_list_happy(data_agent_app) -> None:
+    r = await _call_invoke(
+        data_agent_app,
+        intent={
+            "action": "feishu.drive.list",
+            "resource": "folder:",
+            "params": {"file_type": "bitable"},
+        },
+        scope=["feishu.drive.list:folder:*"],
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()["data"]
+    tokens = [f["token"] for f in data["files"]]
+    assert "bascn_alice" in tokens
+    assert "bascn_other" in tokens
+    # docx file should be filtered out by file_type=bitable
+    assert "doccnxxxx" not in tokens
+
+
+@pytest.mark.asyncio
+async def test_bitable_list_tables_happy(data_agent_app) -> None:
+    r = await _call_invoke(
+        data_agent_app,
+        intent={
+            "action": "feishu.bitable.list_tables",
+            "resource": "app_token:bascn_alice",
+        },
+        scope=["feishu.bitable.list_tables:app_token:bascn_alice"],
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()["data"]
+    table_ids = {t["table_id"] for t in data["tables"]}
+    assert {"tbl_q1", "tbl_q2"} <= table_ids
+
+
+@pytest.mark.asyncio
 async def test_bad_resource_format(data_agent_app) -> None:
     r = await _call_invoke(
         data_agent_app,

@@ -90,7 +90,15 @@ export interface ChatResponse {
   plan_id: string;
   dag: DagTask[];
   results: Record<string, unknown>;
-  doc?: { document_id: string; url: string } | string;
+  doc?:
+    | {
+        document_id: string;
+        url: string;
+        storage?: string;
+        title?: string;
+        block_count?: number;
+      }
+    | string;
 }
 
 export interface AuditStats {

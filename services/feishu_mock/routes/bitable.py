@@ -39,3 +39,26 @@ async def list_records(
             "total": len(records),
         },
     }
+
+
+@router.get("/open-apis/bitable/v1/apps/{app_token}/tables")
+async def list_tables(app_token: str, page_size: int = Query(50, ge=1, le=200)) -> dict:
+    fixtures = load_fixtures()
+    tables = fixtures.get("bitable_tables", {}).get(app_token)
+    if tables is None:
+        # Fall back: derive from the bitable fixture map so editors can drop
+        # in a new app_token without also touching ``bitable_tables``.
+        bitable = fixtures.get("bitable", {})
+        app = bitable.get(app_token)
+        if app is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": 91402, "msg": f"app_token {app_token} not found"},
+            )
+        tables = [{"table_id": tid, "name": tid} for tid in app.keys()]
+    items = tables[:page_size]
+    return {
+        "code": 0,
+        "msg": "success",
+        "data": {"items": items, "has_more": False, "page_token": "", "total": len(items)},
+    }
