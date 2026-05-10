@@ -105,6 +105,15 @@ export default function ChatPage() {
     return "#";
   }
 
+  // Same idea for raw picker rows — folder rows have no public deep link, so
+  // we only emit a URL for files the user can actually open in Feishu.
+  function fileUrl(f: DriveFile): string | null {
+    if (f.type === "bitable") return `https://feishu.cn/base/${f.token}`;
+    if (f.type === "docx") return `https://feishu.cn/docx/${f.token}`;
+    if (f.type === "folder") return `https://feishu.cn/drive/folder/${f.token}`;
+    return null;
+  }
+
   async function submit() {
     const prompt = input.trim();
     if (!prompt || loading) return;
@@ -243,26 +252,7 @@ export default function ChatPage() {
               {msg.error ? (
                 <div><span className="font-medium">错误：</span>{msg.error}</div>
               ) : msg.role === "user" ? (
-                <div>
-                  {msg.sources && msg.sources.length > 0 && (
-                    <div className="mb-2 flex flex-col gap-1 text-xs">
-                      {msg.sources.map((s, si) => (
-                        <a
-                          key={si}
-                          href={selUrl(s)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-blue-100 hover:text-white underline decoration-blue-300/60 hover:decoration-white break-all"
-                        >
-                          <span aria-hidden>📊</span>
-                          <span>{selLabel(s)}</span>
-                          <span aria-hidden className="opacity-70">↗</span>
-                        </a>
-                      ))}
-                    </div>
-                  )}
-                  <div className="whitespace-pre-wrap">{msg.text}</div>
-                </div>
+                <div className="whitespace-pre-wrap">{msg.text}</div>
               ) : (
                 <>
                   {/* Doc content */}
@@ -346,6 +336,14 @@ export default function ChatPage() {
           >
             <span>{b.kind === "docx" ? "📄" : b.table_id ? "📊" : "📊✓"}</span>
             <span>{selLabel(b)}</span>
+            <a
+              href={selUrl(b)}
+              target="_blank"
+              rel="noreferrer"
+              title="在飞书中打开"
+              className="hover:underline opacity-80 hover:opacity-100"
+              onClick={(e) => e.stopPropagation()}
+            >↗</a>
             <button
               onClick={() => removeSel(i)}
               className="hover:text-slate-900"
@@ -524,6 +522,16 @@ export default function ChatPage() {
                             {wholeSelected ? "✓ 已加入" : "✓ 整选"}
                           </button>
                         )}
+                        {fileUrl(f) && (
+                          <a
+                            href={fileUrl(f)!}
+                            target="_blank"
+                            rel="noreferrer"
+                            title="在飞书中打开"
+                            onClick={(e) => e.stopPropagation()}
+                            className="self-center px-2 rounded-lg text-sm text-blue-600 hover:bg-blue-50 border border-blue-200"
+                          >↗</a>
+                        )}
                       </li>
                     );
                   })}
@@ -542,11 +550,11 @@ export default function ChatPage() {
                         b.table_id === t.table_id
                     );
                     return (
-                      <li key={t.table_id}>
+                      <li key={t.table_id} className="flex items-stretch gap-1">
                         <button
                           onClick={() => pickTable(t)}
                           disabled={selected}
-                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-emerald-50 text-sm text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                          className="flex-1 text-left px-3 py-2 rounded-lg hover:bg-emerald-50 text-sm text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                         >
                           <span className="flex-1 min-w-0">
                             <div className="font-medium truncate">{t.name || t.table_id}</div>
@@ -554,6 +562,14 @@ export default function ChatPage() {
                           </span>
                           {selected && <span className="text-emerald-600 text-xs">✓ 已选</span>}
                         </button>
+                        <a
+                          href={`https://feishu.cn/base/${pickedFile.token}?table=${t.table_id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="在飞书中打开"
+                          onClick={(e) => e.stopPropagation()}
+                          className="self-center px-2 rounded-lg text-sm text-blue-600 hover:bg-blue-50 border border-blue-200"
+                        >↗</a>
                       </li>
                     );
                   })}

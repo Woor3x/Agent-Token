@@ -245,8 +245,35 @@ def _users_to_block(users: list[dict]) -> list[dict]:
     return [{"block_type": "text", "text": "\n".join(lines) or "(暂无成员)"}]
 
 
+def _md_escape_inline(s: str) -> str:
+    """Defang markdown control chars that would otherwise be parsed as syntax.
+
+    Search snippets routinely include literal ``[label](url)`` strings copied
+    from the source page; left unescaped, GFM renders them as nested links
+    inside our ``- [title](url) — snippet`` row, producing a soup of tiny
+    "新闻" / "图片" links instead of the snippet body. Escape the brackets
+    and pipes (the latter would also break markdown tables) while leaving
+    URLs alone — they'll render as plain text at worst.
+    """
+    if not s:
+        return ""
+    out: list[str] = []
+    for ch in s:
+        if ch in "[]|`*_<>":
+            out.append("\\" + ch)
+        elif ch == "\n":
+            out.append(" ")
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
 def _search_to_block(hits: list[dict]) -> list[dict]:
-    lines = [f"- [{h.get('title','?')}]({h.get('url','')}) — {h.get('snippet','')}" for h in hits]
+    lines = [
+        f"- [{_md_escape_inline(h.get('title', '?'))}]({h.get('url', '')}) — "
+        f"{_md_escape_inline(h.get('snippet', ''))}"
+        for h in hits
+    ]
     return [{"block_type": "text", "text": "\n".join(lines) or "(无检索结果)"}]
 
 
@@ -403,20 +430,29 @@ async def synthesizer_node(state: dict[str, Any]) -> dict[str, Any]:
             blocks.append({"block_type": "code", "text": diagram})
 
     dag_by_id = {t["id"]: t for t in dag}
+    # Track the last emitted section heading so that consecutive tasks of the
+    # same kind (e.g. multiple ``web.fetch`` legs auto-expanded after one
+    # ``web.search``) don't each emit their own ``网页摘要`` heading2 and
+    # leave a trail of empty sections between them.
+    last_section: str | None = None
     for tid, data in state.get("results", {}).items():
         task = dag_by_id.get(tid, {})
         action = task.get("action", "")
         section_title = _section_label(action, fallback_tid=f"{tid}: {action}")
-        blocks.append({"block_type": "heading2", "text": section_title})
+        if section_title != last_section:
+            blocks.append({"block_type": "heading2", "text": section_title})
+            last_section = section_title
 
-        # Per-section LLM observation (if matched), else deterministic fallback for tables.
-        llm_obs = obs_by_label.get(section_title)
-        if llm_obs:
-            blocks.append({"block_type": "text", "text": llm_obs})
-        elif action in ("feishu.bitable.read", "feishu.bitable.read_all"):
-            cheap = _bitable_observation(data.get("records") or [])
-            if cheap:
-                blocks.append({"block_type": "text", "text": cheap})
+            # Per-section LLM observation (if matched), else deterministic
+            # fallback for tables. Only emit on the first task of a section so
+            # repeated fetches don't duplicate the observation block.
+            llm_obs = obs_by_label.get(section_title)
+            if llm_obs:
+                blocks.append({"block_type": "text", "text": llm_obs})
+            elif action in ("feishu.bitable.read", "feishu.bitable.read_all"):
+                cheap = _bitable_observation(data.get("records") or [])
+                if cheap:
+                    blocks.append({"block_type": "text", "text": cheap})
 
         if action == "feishu.bitable.read":
             blocks.extend(_rows_to_table(data.get("records") or []))
@@ -441,7 +477,23 @@ async def synthesizer_node(state: dict[str, Any]) -> dict[str, Any]:
         elif action == "web.search":
             blocks.extend(_search_to_block(data.get("results") or []))
         elif action == "web.fetch":
-            blocks.append({"block_type": "text", "text": data.get("summary", "")})
+            url = (data or {}).get("url") or task.get("resource") or ""
+            summary = ((data or {}).get("summary") or "").strip()
+            err = (data or {}).get("error")
+            host = ""
+            if url:
+                from urllib.parse import urlparse as _urlparse
+                try:
+                    host = _urlparse(url).hostname or url
+                except ValueError:
+                    host = url
+            if host:
+                blocks.append({"block_type": "heading3", "text": host})
+            if summary:
+                blocks.append({"block_type": "text", "text": summary})
+            else:
+                msg = "(抓取失败)" if err else "(无内容)"
+                blocks.append({"block_type": "text", "text": msg})
         else:
             blocks.append({"block_type": "text", "text": str(data)})
 
