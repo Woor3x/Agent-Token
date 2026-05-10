@@ -45,6 +45,8 @@ _VALID_EVENT_TYPES = {
     "revoke_issued",
     "anomaly",
     "agent_registered",
+    "key_rotated",
+    "plan_validated",
 }
 
 

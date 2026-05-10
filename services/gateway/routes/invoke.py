@@ -59,6 +59,18 @@ async def invoke(request: Request):
     # One-shot consume
     redis = request.app.state.redis
     await consume_one_shot(redis, claims)
+    audit_writer.emit({
+        "event_type": "token_consumed",
+        "trace_id": getattr(request.state, "trace_id", ""),
+        "span_id": getattr(request.state, "span_id", ""),
+        "plan_id": claims.get("plan_id", ""),
+        "task_id": claims.get("task_id", ""),
+        "sub": claims.get("sub", ""),
+        "target_agent": target_agent,
+        "jti": claims.get("jti", ""),
+        "action": intent.get("action", ""),
+        "resource": intent.get("resource", ""),
+    })
 
     # Route upstream
     cfg = registry.get(target_agent)

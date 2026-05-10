@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { listAuditEvents, streamAuditEvents } from "@/lib/api";
 import type { AuditEvent } from "@/types";
 
-const EVENT_TYPES = ["", "authz_decision", "token_issued", "token_consumed", "revoke_issued", "anomaly", "agent_registered"];
+const EVENT_TYPES = ["", "authz_decision", "token_issued", "token_consumed", "revoke_issued", "anomaly", "agent_registered", "key_rotated", "plan_validated"];
 const DECISIONS = ["", "allow", "deny"];
 
 function fmtTime(ts?: string): string {
@@ -31,6 +31,8 @@ function eventTypeBadge(t: string) {
   if (t === "revoke_issued") return "bg-orange-50 text-orange-700";
   if (t === "anomaly") return "bg-red-50 text-red-600";
   if (t === "agent_registered") return "bg-teal-50 text-teal-700";
+  if (t === "key_rotated") return "bg-cyan-50 text-cyan-700";
+  if (t === "plan_validated") return "bg-violet-50 text-violet-700";
   return "bg-slate-50 text-slate-600";
 }
 

@@ -154,7 +154,7 @@ def _to_audit_event(r: dict) -> dict:
         else None
     )
     return {
-        "event_type": "authz_decision",
+        "event_type": r.get("event_type", "authz_decision"),
         "timestamp": timestamp,
         "trace_id": r.get("trace_id"),
         "span_id": r.get("span_id"),

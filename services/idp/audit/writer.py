@@ -26,6 +26,8 @@ _TYPE_MAP = {
     "token.issue": "token_issued",
     "token.revoke": "revoke_issued",
     "agent.register": "agent_registered",
+    "agent.rotate_key": "key_rotated",
+    "plan.validate": "plan_validated",
 }
 
 
