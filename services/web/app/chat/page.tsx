@@ -4,14 +4,8 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getAccessToken } from "@/lib/auth";
 import { sendChat } from "@/lib/api";
+import { useChatStore } from "@/lib/store";
 import type { ChatResponse, DagTask } from "@/types";
-
-interface Message {
-  role: "user" | "agent";
-  text: string;       // extracted display content
-  response?: ChatResponse;
-  error?: string;
-}
 
 function extractContent(resp: ChatResponse): string {
   // Prefer explicit doc content string
@@ -35,15 +29,23 @@ function docUrl(resp: ChatResponse): string | null {
 
 export default function ChatPage() {
   const router = useRouter();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const { messages, taskStatus, addMessage, setTaskStatus, clearMessages } = useChatStore();
+  const loading = taskStatus === "running";
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // auth check only on mount — don't put router in deps to avoid re-running on every navigation
   useEffect(() => {
     if (!getAccessToken()) router.replace("/login");
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Rehydrate the Zustand store from sessionStorage after the component mounts
+  // on the client. This must be separate from the auth check because it needs
+  // to run on every mount (including navigation returns), and skipHydration:true
+  // in the store prevents the auto-hydration that races with Next.js SSR.
+  useEffect(() => {
+    useChatStore.persist.rehydrate();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -54,22 +56,16 @@ export default function ChatPage() {
     const prompt = input.trim();
     if (!prompt || loading) return;
     setInput("");
-    setMessages((m) => [...m, { role: "user", text: prompt }]);
-    setLoading(true);
+    addMessage({ role: "user", text: prompt });
+    setTaskStatus("running");
 
     try {
       const resp = await sendChat(prompt);
-      setMessages((m) => [
-        ...m,
-        { role: "agent", text: extractContent(resp), response: resp },
-      ]);
+      addMessage({ role: "agent", text: extractContent(resp), response: resp });
+      setTaskStatus("idle");
     } catch (e) {
-      setMessages((m) => [
-        ...m,
-        { role: "agent", text: "", error: String(e) },
-      ]);
-    } finally {
-      setLoading(false);
+      addMessage({ role: "agent", text: "", error: String(e) });
+      setTaskStatus("error");
     }
   }
 
@@ -86,6 +82,17 @@ export default function ChatPage() {
             </div>
             <div className="font-medium text-slate-600">文档助手已就绪</div>
             <div className="mt-1 text-xs text-slate-400">例如：把 Q1 销售数据整理成报告</div>
+          </div>
+        )}
+
+        {/* Banner shown when user returns to the page while a task is still running */}
+        {taskStatus === "running" && messages.length > 0 && (
+          <div className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+            <svg className="w-3.5 h-3.5 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+            任务处理中，请稍候…
           </div>
         )}
 
@@ -109,7 +116,7 @@ export default function ChatPage() {
                     <div className="flex items-center gap-2 mb-2">
                       <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                       <span className="text-xs font-medium text-slate-500">生成文档</span>
                     </div>
@@ -182,6 +189,15 @@ export default function ChatPage() {
         >
           发送
         </button>
+        {messages.length > 0 && !loading && (
+          <button
+            onClick={clearMessages}
+            className="text-slate-400 hover:text-slate-600 px-3 py-2 rounded-lg text-sm transition-colors"
+            title="清空对话"
+          >
+            清空
+          </button>
+        )}
       </div>
     </div>
   );
