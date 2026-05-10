@@ -18,6 +18,21 @@ from .search.fetcher import (
     summarize_with_llm,
 )
 
+
+def _sanitize_hit(h: dict) -> dict:
+    """Run search-result snippet/title through the same sanitiser used on
+    fetched HTML so upstream backends (Tavily, etc.) can't leak mojibake or
+    inline JS into the synthesizer prompt.
+    """
+    out = dict(h or {})
+    title = (out.get("title") or "").strip()
+    snippet = (out.get("snippet") or "").strip()
+    if title:
+        out["title"] = _extract_text(title, max_chars=200)
+    if snippet:
+        out["snippet"] = _extract_text(snippet, max_chars=600)
+    return out
+
 _log = get_logger("agents.web_agent")
 
 
@@ -47,6 +62,7 @@ class WebAgentHandler:
                 int(constraints.get("max_results", 10)),
             )
             hits = await search_client.search(q, max_results=max_results)
+            hits = [_sanitize_hit(h) for h in hits]
             return {"query": q, "results": hits, "count": len(hits)}
         if action == "web.fetch":
             try:
