@@ -107,7 +107,7 @@ def _rule_plan(prompt: str) -> list[dict]:
             "id": f"t{len(tasks)+1}", "agent": "web_agent",
             "action": "web.search",
             "resource": "*",
-            "params": {"query": prompt, "max_results": 3},
+            "params": {"query": prompt, "max_results": 3, "fetch_top_k": 2},
             "deps": [],
         })
     if not tasks:
@@ -115,7 +115,7 @@ def _rule_plan(prompt: str) -> list[dict]:
             "id": "t1", "agent": "web_agent",
             "action": "web.search",
             "resource": "*",
-            "params": {"query": prompt, "max_results": 3},
+            "params": {"query": prompt, "max_results": 3, "fetch_top_k": 2},
             "deps": [],
         })
     deps = [t["id"] for t in tasks]

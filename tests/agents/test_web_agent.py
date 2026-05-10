@@ -115,4 +115,78 @@ async def test_fetch_ok_via_mock(web_agent_app, monkeypatch) -> None:
     )
     assert r.status_code == 200, r.text
     body = r.json()["data"]
+    # LLM provider defaults to mock → summarize_with_llm falls back to char-truncate
     assert "hello world" in body["summary"]
+
+
+@pytest.mark.asyncio
+async def test_search_tavily_backend(monkeypatch) -> None:
+    from agents.web_agent.search import client as search_client
+
+    captured: dict = {}
+
+    class _FakeResp:
+        def raise_for_status(self):  # noqa: D401
+            return None
+
+        def json(self):
+            return {
+                "results": [
+                    {"title": "T1", "url": "https://x.example.com/1", "content": "snip1"},
+                    {"title": "T2", "url": "https://y.example.com/2", "content": "snip2"},
+                ]
+            }
+
+    class _FakeClient:
+        def __init__(self, *a, **kw):
+            captured["init"] = (a, kw)
+
+        async def post(self, url, json=None):
+            captured["url"] = url
+            captured["payload"] = json
+            return _FakeResp()
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr(search_client.httpx, "AsyncClient", _FakeClient)
+    monkeypatch.setenv("WEB_SEARCH_BACKEND", "tavily")
+    monkeypatch.setenv("TAVILY_API_KEY", "tvly-test-key")
+
+    hits = await search_client.search("agent token", max_results=2)
+
+    assert captured["url"] == "https://api.tavily.com/search"
+    assert captured["payload"]["api_key"] == "tvly-test-key"
+    assert captured["payload"]["query"] == "agent token"
+    assert captured["payload"]["max_results"] == 2
+    assert hits == [
+        {"title": "T1", "url": "https://x.example.com/1", "snippet": "snip1"},
+        {"title": "T2", "url": "https://y.example.com/2", "snippet": "snip2"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_search_tavily_requires_key(monkeypatch) -> None:
+    from agents.web_agent.search import client as search_client
+
+    monkeypatch.setenv("WEB_SEARCH_BACKEND", "tavily")
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    monkeypatch.delenv("SEARCH_API_KEY", raising=False)
+
+    with pytest.raises(RuntimeError, match="TAVILY_API_KEY"):
+        await search_client.search("x", max_results=1)
+
+
+def test_url_allowed_domain_open_switch(monkeypatch) -> None:
+    # Default: arbitrary domain blocked.
+    ok, reason = url_allowed("https://news.ycombinator.com/")
+    assert not ok and reason == "domain_not_allowed"
+    # With domain-open switch, scheme + DNS + CIDR still enforced.
+    monkeypatch.setenv("WEB_FETCH_DOMAIN_OPEN", "true")
+    ok, reason = url_allowed("https://news.ycombinator.com/")
+    # domain check passes; remaining checks may pass or block on DNS env.
+    # We accept either ok or non-domain block reason.
+    assert ok or reason != "domain_not_allowed"
+    # Loopback IP literal still blocked by CIDR even with domain open.
+    ok, reason = url_allowed("https://127.0.0.1/")
+    assert not ok and reason.startswith("ip_blocked")

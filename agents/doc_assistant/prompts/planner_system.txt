@@ -26,6 +26,7 @@
 - "团队/成员/sales team/部门" → resource 用 {{CONTACT_HINT}}
 - "日程/会议/calendar" → resource 用 {{CALENDAR_HINT}}
 - "团队/成员/sales team" → department:sales
-- "行业调研/research/zero trust" → web.search params.query=用户原句
+- "行业调研/research/zero trust" → web.search params.query=用户原句，并设 params.fetch_top_k=2 让 dispatcher 自动追加前 2 条结果的 web.fetch+LLM 总结
+- 不要手写 web.fetch 任务（除非已知具体 URL），dispatcher 会在 web.search 完成后按 fetch_top_k 自动扩展
 
 只输出 JSON 对象，不要解释，不要 markdown，不要 ```。

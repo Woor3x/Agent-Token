@@ -19,7 +19,7 @@ from agents.common.server import AgentServer, sign_mock_token
 from agents.data_agent.feishu.oauth import FeishuOAuth
 from agents.data_agent.handler import DataAgentHandler
 from agents.doc_assistant.handler import DocAssistantHandler
-from agents.doc_assistant.nodes.dispatcher import _topo_layers
+from agents.doc_assistant.nodes.dispatcher import _topo_layers, dispatcher_node
 from agents.doc_assistant.nodes.planner import _rule_plan, validate_dag
 from agents.doc_assistant.nodes.synthesizer import synthesizer_node
 from agents.web_agent.handler import WebAgentHandler
@@ -65,6 +65,146 @@ def test_topo_layers_cycle_detected() -> None:
             {"id": "a", "deps": ["b"]},
             {"id": "b", "deps": ["a"]},
         ])
+
+
+class _StubSDK:
+    """Minimal SDK stub for dispatcher tests — records calls, returns canned outs."""
+
+    def __init__(self, responses: dict):
+        self.responses = responses
+        self.calls: list[dict] = []
+
+    async def invoke(self, *, target_agent, intent, trace_id, plan_id, task_id):
+        self.calls.append({
+            "agent": target_agent, "intent": intent, "task_id": task_id,
+        })
+        return self.responses.get(task_id, {"data": {}})
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_auto_fetch_expansion() -> None:
+    """web.search with fetch_top_k=2 → dispatcher appends 2 web.fetch tasks
+    and patches doc.write deps to wait for them."""
+    sdk = _StubSDK(
+        responses={
+            "t1": {"data": {
+                "results": [
+                    {"title": "A", "url": "https://a.example.com/x", "snippet": "sa"},
+                    {"title": "B", "url": "https://b.example.com/y", "snippet": "sb"},
+                    {"title": "C", "url": "https://c.example.com/z", "snippet": "sc"},
+                ],
+                "count": 3,
+            }},
+            # Fetch tasks get auto-ids t3, t4 (since dag len=2 → seed=3)
+            "t3": {"data": {"url": "https://a.example.com/x", "summary": "sumA", "length": 100}},
+            "t4": {"data": {"url": "https://b.example.com/y", "summary": "sumB", "length": 100}},
+        }
+    )
+    state = {
+        "sdk": sdk,
+        "trace_id": "tr-1", "plan_id": "pl-1",
+        "dag": [
+            {"id": "t1", "agent": "web_agent", "action": "web.search",
+             "resource": "*", "params": {"query": "xss", "fetch_top_k": 2}, "deps": []},
+            {"id": "t2", "agent": "doc_assistant", "action": "feishu.doc.write",
+             "resource": "doc_token:auto", "params": {"title": "Auto"}, "deps": ["t1"]},
+        ],
+    }
+    out = await dispatcher_node(state)
+
+    # 1) DAG mutated: 2 new fetch tasks appended.
+    actions = [t["action"] for t in out["dag"]]
+    assert actions.count("web.fetch") == 2
+    fetch_ids = [t["id"] for t in out["dag"] if t["action"] == "web.fetch"]
+    assert fetch_ids == ["t3", "t4"]
+
+    # 2) doc.write deps patched to include both fetch ids.
+    doc_task = next(t for t in out["dag"] if t["action"] == "feishu.doc.write")
+    assert set(doc_task["deps"]) == {"t1", "t3", "t4"}
+
+    # 3) SDK invoked for search + 2 fetches (doc.write skipped here, doc_writer_node handles).
+    invoked_actions = [c["intent"]["action"] for c in sdk.calls]
+    # search first, then 2 fetches in any order (asyncio.gather scheduling).
+    assert invoked_actions[0] == "web.search"
+    assert sorted(invoked_actions[1:]) == ["web.fetch", "web.fetch"]
+    fetched_urls = {c["intent"]["resource"] for c in sdk.calls if c["intent"]["action"] == "web.fetch"}
+    assert fetched_urls == {"https://a.example.com/x", "https://b.example.com/y"}
+
+    # 4) Results captured for all dispatched tasks.
+    assert set(out["results"]) == {"t1", "t3", "t4"}
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_skips_expansion_when_top_k_zero() -> None:
+    """Per-task ``fetch_top_k=0`` opt-out overrides the global default."""
+    sdk = _StubSDK(responses={"t1": {"data": {"results": [
+        {"title": "A", "url": "https://a.example.com/x", "snippet": "sa"},
+    ]}}})
+    state = {
+        "sdk": sdk,
+        "trace_id": "tr", "plan_id": "pl",
+        "dag": [
+            {"id": "t1", "agent": "web_agent", "action": "web.search",
+             "resource": "*", "params": {"query": "x", "fetch_top_k": 0}, "deps": []},
+            {"id": "t2", "agent": "doc_assistant", "action": "feishu.doc.write",
+             "resource": "doc_token:auto", "params": {}, "deps": ["t1"]},
+        ],
+    }
+    out = await dispatcher_node(state)
+    assert all(t["action"] != "web.fetch" for t in out["dag"])
+    assert [c["intent"]["action"] for c in sdk.calls] == ["web.search"]
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_default_top_k_applies_when_task_unset(monkeypatch) -> None:
+    """When a search task omits fetch_top_k, the global default kicks in."""
+    monkeypatch.setenv("WEB_AUTO_FETCH_TOP_K", "2")
+    sdk = _StubSDK(
+        responses={
+            "t1": {"data": {"results": [
+                {"title": "A", "url": "https://a.example.com/x", "snippet": "sa"},
+                {"title": "B", "url": "https://b.example.com/y", "snippet": "sb"},
+                {"title": "C", "url": "https://c.example.com/z", "snippet": "sc"},
+            ]}},
+            "t3": {"data": {"url": "https://a.example.com/x", "summary": "sA", "length": 1}},
+            "t4": {"data": {"url": "https://b.example.com/y", "summary": "sB", "length": 1}},
+        }
+    )
+    state = {
+        "sdk": sdk,
+        "trace_id": "tr", "plan_id": "pl",
+        "dag": [
+            {"id": "t1", "agent": "web_agent", "action": "web.search",
+             "resource": "*", "params": {"query": "x"}, "deps": []},
+            {"id": "t2", "agent": "doc_assistant", "action": "feishu.doc.write",
+             "resource": "doc_token:auto", "params": {}, "deps": ["t1"]},
+        ],
+    }
+    out = await dispatcher_node(state)
+    assert sum(1 for t in out["dag"] if t["action"] == "web.fetch") == 2
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_drops_unsafe_fetch_urls() -> None:
+    """Non-https or hostless URLs from search results must not get fetched."""
+    sdk = _StubSDK(responses={"t1": {"data": {"results": [
+        {"title": "bad", "url": "http://insecure.example.com/", "snippet": "x"},
+        {"title": "ok",  "url": "https://ok.example.com/",      "snippet": "y"},
+        {"title": "junk", "url": "ftp://nope/",                 "snippet": "z"},
+    ]}}})
+    state = {
+        "sdk": sdk,
+        "trace_id": "tr", "plan_id": "pl",
+        "dag": [
+            {"id": "t1", "agent": "web_agent", "action": "web.search",
+             "resource": "*", "params": {"query": "x", "fetch_top_k": 3}, "deps": []},
+            {"id": "t2", "agent": "doc_assistant", "action": "feishu.doc.write",
+             "resource": "doc_token:auto", "params": {}, "deps": ["t1"]},
+        ],
+    }
+    out = await dispatcher_node(state)
+    fetched = [t["resource"] for t in out["dag"] if t["action"] == "web.fetch"]
+    assert fetched == ["https://ok.example.com/"]
 
 
 @pytest.mark.asyncio

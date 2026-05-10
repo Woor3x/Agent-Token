@@ -8,7 +8,13 @@ from agents.common.capability import Capability
 from agents.common.logging import get_logger
 
 from .search import client as search_client
-from .search.fetcher import FetchBlocked, _extract_text, http_fetch, summarize
+from .search.fetcher import (
+    FetchBlocked,
+    _extract_text,
+    http_fetch,
+    summarize,
+    summarize_with_llm,
+)
 
 _log = get_logger("agents.web_agent")
 
@@ -51,5 +57,8 @@ class WebAgentHandler:
             except FetchBlocked as e:
                 raise PermissionError(f"fetch_blocked:{e}") from e
             text = _extract_text(raw)
-            return {"url": resource, "summary": summarize(text), "length": len(text)}
+            query = params.get("query")
+            # 2c: LLM-synthesized summary, raw text never returned/stored.
+            summary = await summarize_with_llm(text, query=query)
+            return {"url": resource, "summary": summary, "length": len(text)}
         raise ValueError(f"unsupported action: {action}")
