@@ -153,8 +153,27 @@ async def dispatcher_node(state: dict[str, Any]) -> dict[str, Any]:
             ))
         outs = await asyncio.gather(*coros, return_exceptions=True)
 
+        # Build a quick lookup so we can decide per-task whether a failure is
+        # fatal. ``_auto_expanded`` tasks (web.fetch injected after web.search)
+        # are best-effort — a single dead URL must not abort the whole DAG;
+        # the synthesizer falls back to the search-hit metadata.
+        layer_by_id = {t["id"]: t for t in next_layer}
         for tid, out in zip(ids, outs):
             if isinstance(out, BaseException):
+                t = layer_by_id.get(tid, {})
+                if t.get("_auto_expanded"):
+                    _log.warning(
+                        f"dispatcher.skip auto-expanded task={tid} "
+                        f"action={t.get('action')} err={type(out).__name__}: {out}"
+                    )
+                    results[tid] = {
+                        "url": t.get("resource", ""),
+                        "summary": "",
+                        "length": 0,
+                        "error": f"{type(out).__name__}: {out}"[:200],
+                    }
+                    dispatched.add(tid)
+                    continue
                 raise DispatchFailed(tid, out)
             results[tid] = out
             dispatched.add(tid)

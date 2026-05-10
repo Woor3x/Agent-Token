@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpx
+
 from agents.common.auth import VerifiedClaims
 from agents.common.capability import Capability
 from agents.common.logging import get_logger
@@ -56,6 +58,21 @@ class WebAgentHandler:
                 )
             except FetchBlocked as e:
                 raise PermissionError(f"fetch_blocked:{e}") from e
+            except (httpx.HTTPError, OSError) as e:
+                # Transient network failures (ConnectTimeout, RemoteProtocolError,
+                # DNS issues, TLS reset, …) on auto-expanded fetch tasks must NOT
+                # abort the entire DAG — the synthesizer can still produce a
+                # report from the search hits. Return a degraded record so the
+                # caller can surface "fetch failed" without raising.
+                _log.warning(
+                    f"web.fetch failed url={resource} err={type(e).__name__}: {e}"
+                )
+                return {
+                    "url": resource,
+                    "summary": "",
+                    "length": 0,
+                    "error": f"{type(e).__name__}: {e}"[:200],
+                }
             text = _extract_text(raw)
             query = params.get("query")
             # 2c: LLM-synthesized summary, raw text never returned/stored.
