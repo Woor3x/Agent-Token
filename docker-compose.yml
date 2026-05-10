@@ -21,7 +21,7 @@ x-agent-env: &agent-env
   GATEWAY_URL: http://gateway:9200
   # FEISHU_BASE 默认 mock，可在 .env 覆盖为 https://open.feishu.cn 接真飞书。
   # 当 FEISHU_BASE 不是 feishu-mock 时，oauth.py 会 fail-fast 拦住占位凭证，避免误打 prod。
-  FEISHU_BASE: ${FEISHU_BASE:-http://feishu-mock:9000}
+  FEISHU_BASE: ${FEISHU_BASE:-https://open.feishu.cn}
   FEISHU_MOCK: ${FEISHU_MOCK:-true}
   FEISHU_APP_ID: ${FEISHU_APP_ID:-}
   FEISHU_APP_SECRET: ${FEISHU_APP_SECRET:-}
@@ -32,6 +32,7 @@ x-agent-env: &agent-env
   # Shared folder bot was added as collaborator on. Picker uses it as default
   # root because /drive/v1/files (tenant token) only lists bot's own drive.
   FEISHU_SHARED_ROOT_FOLDER: ${FEISHU_SHARED_ROOT_FOLDER:-}
+  IDP_PLAN_VALIDATE_URL: http://idp:8000/plan/validate
   MOCK_AUTH: "false"
   VERIFY_DPOP: "false"
   POLICY_VERSION: v1.2.0
