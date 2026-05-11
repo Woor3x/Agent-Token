@@ -33,8 +33,19 @@ except ImportError:  # pragma: no cover
     _HAS_RICH = False
 
 _SEEN_SECTIONS: set[str] = set()
+# nodeid → first line of the test's docstring (populated in pytest_collection_finish)
+_ITEM_DOCS: dict[str, str] = {}
 
 ADMIN_HDR = {"Authorization": "Bearer test-admin-token"}
+
+
+def pytest_collection_finish(session: pytest.Session) -> None:
+    """Collect the first line of every test's docstring for later display."""
+    for item in session.items:
+        doc = getattr(item.function, "__doc__", None) or ""
+        first_line = doc.strip().splitlines()[0].strip() if doc.strip() else ""
+        if first_line:
+            _ITEM_DOCS[item.nodeid] = first_line
 
 
 def pytest_sessionstart(session: pytest.Session) -> None:
@@ -56,13 +67,18 @@ def pytest_sessionstart(session: pytest.Session) -> None:
 
 
 def pytest_runtest_logreport(report: pytest.TestReport) -> None:  # type: ignore[name-defined]
-    """每个 call 阶段: 打印分区标题 + 彩色 PASS/FAIL 行。"""
+    """每个 call 阶段: 打印分区标题 + 彩色 PASS/FAIL 行 + docstring + 失败详情。"""
     if not _HAS_RICH or report.when != "call":
         return
 
     parts = report.nodeid.split("::")
     cls = parts[-2] if len(parts) >= 3 else ""
     name = parts[-1]
+    doc = _ITEM_DOCS.get(report.nodeid, "")
+
+    # Duration — available as report.duration (float seconds)
+    dur = getattr(report, "duration", None)
+    dur_str = f"[dim]{dur * 1000:.0f}ms[/dim]" if dur is not None else ""
 
     try:
         if cls and cls not in _SEEN_SECTIONS:
@@ -73,11 +89,39 @@ def pytest_runtest_logreport(report: pytest.TestReport) -> None:  # type: ignore
             )
 
         if report.passed:
-            _con.print(f"  [green]PASS[/green] [dim]{name}[/dim]")
+            _con.print(f"  [green]PASS[/green] [dim]{name}[/dim]  {dur_str}")
+            if doc:
+                _con.print(f"       [italic dim]{doc}[/italic dim]")
         elif report.failed:
-            _con.print(f"  [bold red]FAIL[/bold red] [red]{name}[/red]")
+            _con.print(f"  [bold red]FAIL[/bold red] [red]{name}[/red]  {dur_str}")
+            if doc:
+                _con.print(f"       [italic dim]{doc}[/italic dim]")
+            # Extract the short error message from longrepr
+            err_text = ""
+            if report.longrepr:
+                raw = str(report.longrepr)
+                # Last non-empty line usually contains "AssertionError: ..." or "E  ..."
+                lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+                # Find lines starting with "E " (pytest error lines)
+                e_lines = [ln[2:].strip() for ln in lines if ln.startswith("E ")]
+                if e_lines:
+                    err_text = e_lines[-1][:200]
+                elif lines:
+                    err_text = lines[-1][:200]
+            if err_text:
+                _con.print(
+                    Panel(
+                        f"[red]{err_text}[/red]",
+                        title="[bold red]Error[/bold red]",
+                        border_style="red",
+                        expand=False,
+                        padding=(0, 1),
+                    )
+                )
         elif report.skipped:
-            _con.print(f"  [yellow]SKIP[/yellow] [dim]{name}[/dim]")
+            _con.print(f"  [yellow]SKIP[/yellow] [dim]{name}[/dim]  {dur_str}")
+            if doc:
+                _con.print(f"       [italic dim]{doc}[/italic dim]")
     except Exception:  # pragma: no cover
         pass
 

@@ -154,6 +154,7 @@ def _check_error_schema(resp) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 class TestOidcAuthorize:
     async def test_valid_authorize_returns_html(self, app_client):
+        """GET /oidc/authorize 合法参数 → 200 登录表单 HTML，含 state_token 隐藏域"""
         client, _ = app_client
         verifier, challenge = pkce_pair()
         resp = await client.get(
@@ -173,6 +174,7 @@ class TestOidcAuthorize:
         assert "<form" in resp.text
 
     async def test_bad_response_type(self, app_client):
+        """response_type=token（非 code）→ 400"""
         client, _ = app_client
         _, challenge = pkce_pair()
         resp = await client.get(
@@ -188,6 +190,7 @@ class TestOidcAuthorize:
         assert resp.status_code == 400
 
     async def test_unlisted_redirect_uri(self, app_client):
+        """redirect_uri=https://evil.example.com/cb（不在白名单）→ 400"""
         client, _ = app_client
         _, challenge = pkce_pair()
         resp = await client.get(
@@ -203,6 +206,7 @@ class TestOidcAuthorize:
         assert resp.status_code == 400
 
     async def test_non_s256_method(self, app_client):
+        """code_challenge_method=plain（非 S256）→ 400"""
         client, _ = app_client
         resp = await client.get(
             "/oidc/authorize",
@@ -222,6 +226,7 @@ class TestOidcAuthorize:
 # ─────────────────────────────────────────────────────────────────────────────
 class TestOidcLoginAndToken:
     async def test_stale_state_token(self, app_client):
+        """POST /oidc/login 随机伪造 state_token → 400"""
         client, _ = app_client
         resp = await client.post(
             "/oidc/login",
@@ -234,6 +239,7 @@ class TestOidcLoginAndToken:
         assert resp.status_code == 400
 
     async def test_wrong_password(self, app_client):
+        """合法 state_token + 错误密码 hunter2 → 400"""
         client, _ = app_client
         _, challenge = pkce_pair()
         auth_resp = await client.get(
@@ -258,6 +264,7 @@ class TestOidcLoginAndToken:
         assert resp.status_code == 400
 
     async def test_unsupported_grant_type(self, app_client):
+        """POST /oidc/token grant_type=client_credentials → 400"""
         client, _ = app_client
         resp = await client.post(
             "/oidc/token",
@@ -266,6 +273,7 @@ class TestOidcLoginAndToken:
         assert resp.status_code == 400
 
     async def test_expired_code(self, app_client):
+        """随机伪造 code（不存在于 Redis）换 token → 400"""
         client, _ = app_client
         verifier, _ = pkce_pair()
         resp = await client.post(
@@ -281,6 +289,7 @@ class TestOidcLoginAndToken:
         assert resp.status_code == 400
 
     async def test_pkce_mismatch(self, app_client):
+        """合法 code + 另一对的 code_verifier（S256 不匹配）→ 400"""
         client, _ = app_client
         verifier, challenge = pkce_pair()
         wrong_verifier, _ = pkce_pair()
@@ -395,6 +404,7 @@ class TestDpopProtocol:
     """
 
     async def test_valid_dpop_proof(self, registered_agents):
+        """合法 DPoP proof → verify_dpop_proof() 返回含 jkt / jti 的 claims"""
         info = registered_agents["doc_assistant"]
         proof = _make_dpop_proof(info["private_key_pem"], info["public_jwk"])
         claims = await verify_dpop_proof(proof, "POST", EXCHANGE_URL)
@@ -402,6 +412,7 @@ class TestDpopProtocol:
         assert claims.jti
 
     async def test_wrong_typ(self, registered_agents):
+        """header.typ=JWT（非 dpop+jwt）→ DpopInvalid: typ=dpop+jwt"""
         info = registered_agents["doc_assistant"]
         proof = _make_dpop_proof(
             info["private_key_pem"], info["public_jwk"], typ="JWT"
@@ -428,6 +439,7 @@ class TestDpopProtocol:
             await verify_dpop_proof(proof, "POST", EXCHANGE_URL)
 
     async def test_htm_mismatch(self, registered_agents):
+        """proof.htm=GET，验证 POST → DpopInvalid: htm mismatch"""
         info = registered_agents["doc_assistant"]
         proof = _make_dpop_proof(
             info["private_key_pem"], info["public_jwk"], htm="GET"
@@ -436,6 +448,7 @@ class TestDpopProtocol:
             await verify_dpop_proof(proof, "POST", EXCHANGE_URL)
 
     async def test_htu_mismatch(self, registered_agents):
+        """proof.htu 指向 other.example.com → DpopInvalid: htu mismatch"""
         info = registered_agents["doc_assistant"]
         proof = _make_dpop_proof(
             info["private_key_pem"],
@@ -446,6 +459,7 @@ class TestDpopProtocol:
             await verify_dpop_proof(proof, "POST", EXCHANGE_URL)
 
     async def test_stale_iat(self, registered_agents):
+        """proof.iat 早于当前 120s → DpopInvalid: iat out of window"""
         info = registered_agents["doc_assistant"]
         proof = _make_dpop_proof(
             info["private_key_pem"],
@@ -456,6 +470,7 @@ class TestDpopProtocol:
             await verify_dpop_proof(proof, "POST", EXCHANGE_URL)
 
     async def test_future_iat(self, registered_agents):
+        """proof.iat 超前当前 120s → DpopInvalid: iat out of window"""
         info = registered_agents["doc_assistant"]
         proof = _make_dpop_proof(
             info["private_key_pem"],
@@ -485,6 +500,7 @@ class TestDpopProtocol:
 # ─────────────────────────────────────────────────────────────────────────────
 class TestTokenExchangeErrors:
     async def test_wrong_grant_type(self, app_client):
+        """grant_type=authorization_code → 400 invalid_request"""
         client, _ = app_client
         resp = await client.post(
             "/token/exchange",
@@ -493,6 +509,7 @@ class TestTokenExchangeErrors:
         assert resp.status_code == 400
 
     async def test_missing_dpop_header(self, app_client, registered_agents):
+        """缺少 DPoP 头 → 400 invalid_request"""
         client, _ = app_client
         info = registered_agents["doc_assistant"]
         assertion = _make_agent_assertion(
@@ -509,6 +526,7 @@ class TestTokenExchangeErrors:
         assert "dpop" in err["message"].lower() or err["code"] == "invalid_request"
 
     async def test_unknown_callee_agent(self, app_client, registered_agents):
+        """audience=agent:totally_unknown_agent → 400 unknown callee"""
         client, _ = app_client
         info = registered_agents["doc_assistant"]
         assertion = _make_agent_assertion(
@@ -609,6 +627,7 @@ class TestErrorResponseSchema:
     """Every 4xx response must carry error.code, error.message, error.policy_version."""
 
     async def test_authorize_error_schema(self, app_client):
+        """GET /oidc/authorize response_type=token → error.code + message + policy_version"""
         client, _ = app_client
         _, challenge = pkce_pair()
         resp = await client.get(
@@ -626,6 +645,7 @@ class TestErrorResponseSchema:
         assert err["policy_version"]
 
     async def test_token_error_schema(self, app_client):
+        """POST /oidc/token grant_type=implicit → error.code + message + policy_version"""
         client, _ = app_client
         resp = await client.post(
             "/oidc/token",
@@ -636,6 +656,7 @@ class TestErrorResponseSchema:
         assert err["policy_version"]
 
     async def test_exchange_error_schema(self, app_client):
+        """POST /token/exchange grant_type=password → error.code + trace_id + policy_version"""
         client, _ = app_client
         resp = await client.post(
             "/token/exchange",
