@@ -5,16 +5,16 @@ const DOC_ASSISTANT = "/api/proxy/doc-assistant";
 const AUDIT        = "/api/proxy/audit";
 const IDP          = "/api/proxy/idp";
 const FEISHU       = "/api/proxy/feishu";
-const ADMIN_TOKEN  = process.env.NEXT_PUBLIC_ADMIN_TOKEN!;
-
 function userBearerHeaders(): HeadersInit {
   const t = getAccessToken();
   if (!t) throw new Error("not authenticated");
   return { Authorization: `Bearer ${t}`, "Content-Type": "application/json" };
 }
 
+// Admin-gated calls still carry the user's OIDC token so the proxy can verify
+// the caller is authenticated. The proxy injects the actual admin token server-side.
 function adminBearerHeaders(): HeadersInit {
-  return { Authorization: `Bearer ${ADMIN_TOKEN}`, "Content-Type": "application/json" };
+  return userBearerHeaders();
 }
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
@@ -203,8 +203,10 @@ export function streamAuditEvents(
 
   (async () => {
     try {
+      const t = getAccessToken();
+      if (!t) throw new Error("not authenticated");
       const resp = await fetch(url, {
-        headers: { Authorization: `Bearer ${ADMIN_TOKEN}`, Accept: "text/event-stream" },
+        headers: { Authorization: `Bearer ${t}`, Accept: "text/event-stream" },
         signal: controller.signal,
       });
       if (!resp.ok || !resp.body) throw new Error(`SSE ${resp.status}`);

@@ -16,7 +16,7 @@ x-agent-env: &agent-env
   IDP_URL: http://idp:8000
   IDP_JWKS_URL: http://idp:8000/jwks
   IDP_TOKEN_EXCHANGE_URL: http://idp:8000/token/exchange
-  ADMIN_TOKEN: admin-secret-token
+  ADMIN_TOKEN: ${ADMIN_TOKEN}
   GATEWAY_URL: http://gateway:9200
   # FEISHU_BASE points at real Feishu Open Platform; oauth.py fail-fasts on
   # placeholder credentials so the stack never accidentally hits prod with
@@ -91,7 +91,7 @@ services:
       REDIS_URL: redis://redis:6379
       SQLITE_PATH: /data/idp.db
       OPA_URL: http://opa:8181
-      ADMIN_TOKEN: admin-secret-token
+      ADMIN_TOKEN: ${ADMIN_TOKEN}
       POLICY_VERSION: v1.2.0
       CAPABILITIES_DIR: /data/capabilities
       USERS_DIR: /data/users
@@ -142,7 +142,7 @@ services:
       GW_RATE_LIMIT_REFILL_RATE: "10"
       GW_MTLS_ENABLED: "false"
       GW_AUDIT_DB_PATH: /data/gateway-audit.db
-      GW_ADMIN_TOKEN: admin-secret-token
+      GW_ADMIN_TOKEN: ${ADMIN_TOKEN}
       GW_REGISTRY_PATH: /app/registry.yaml
       GW_POLICY_VERSION: v1.2.0
       GW_AUDIT_API_URL: http://audit-api:8090
@@ -176,7 +176,7 @@ services:
       AUDIT_HOST: 0.0.0.0
       AUDIT_PORT: "8090"
       AUDIT_DB_PATH: /data/audit.db
-      AUDIT_ADMIN_TOKEN: admin-secret-token
+      AUDIT_ADMIN_TOKEN: ${ADMIN_TOKEN}
       AUDIT_SERVICE_TOKENS: gateway-service-token,idp-service-token,anomaly-service-token
       AUDIT_BACKUP_DIR: /data/backup
       AUDIT_FLUSH_INTERVAL_MS: "100"
@@ -257,11 +257,11 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_OIDC_CLIENT_ID: web-ui
-        NEXT_PUBLIC_ADMIN_TOKEN: admin-secret-token
     environment:
       IDP_URL:           http://idp:8000
       DOC_ASSISTANT_URL: http://doc-assistant:8100
       AUDIT_URL:         http://audit-api:8090
+      ADMIN_TOKEN:       ${ADMIN_TOKEN}
     ports: ["3000:3000"]
     depends_on:
       idp:
