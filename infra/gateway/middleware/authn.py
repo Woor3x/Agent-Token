@@ -115,5 +115,9 @@ async def authn_middleware(request: Request, call_next):
         err = authn_invalid(str(exc))
         from errors import _error_body
         return JSONResponse(status_code=err.http_status, content=_error_body(request, err))
-
+    except (ValueError, KeyError) as exc:
+        # jwks_cache.get() raises ValueError for unknown kid
+        err = authn_invalid(str(exc))
+        from errors import _error_body
+        return JSONResponse(status_code=err.http_status, content=_error_body(request, err))
     return await call_next(request)

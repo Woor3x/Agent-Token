@@ -20,6 +20,6 @@ agents:
   web_agent:
     upstream: http://web-agent:8102
     transport: http
-    timeout_ms: 15000
+    timeout_ms: 30000
     retry:
       max: 1
