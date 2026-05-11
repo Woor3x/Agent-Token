@@ -11,8 +11,12 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from authz.delegation import verify_delegation
+from authz.one_shot import consume_one_shot
+from authz.opa_client import check_authz
 from config import settings
-from errors import UpstreamError, _error_body
+from errors import AuthzError, UpstreamError, _error_body
+from intent.schema import validate_intent
 from middleware.audit import audit_writer
 from routing.registry import registry
 from routing.upstream_client import ForwardContext, call_upstream
@@ -34,6 +38,12 @@ async def plan_submit(request: Request):
     context: dict = body.get("context", {})
     trace_id = getattr(request.state, "trace_id", "")
     claims: dict = request.state.token_claims
+    redis = request.app.state.redis
+
+    # Consume the orchestrator's one-shot token at submission time.
+    # Individual tasks reuse the orchestrator's claims for OPA checks but do
+    # not issue or consume per-task tokens.
+    await consume_one_shot(redis, claims)
 
     _plans[plan_id] = {
         "plan_id": plan_id,
@@ -133,12 +143,52 @@ async def _run_task(
     claims: dict,
     trace_id: str,
 ) -> str:
-    """Execute a single DAG task against its target agent."""
+    """Execute a single DAG task with intent validation and OPA authorization."""
     plan = _plans[plan_id]
     tid = task["id"]
     plan["tasks"][tid]["status"] = "running"
 
     agent_id = task.get("agent_id", "")
+    span_id = uuid.uuid4().hex[:16]
+
+    # Build and validate intent from task fields.
+    # Tasks must declare action + resource so OPA can enforce per-task policy.
+    intent: dict = {
+        "action": task.get("action", "orchestrate"),
+        "resource": task.get("resource", "*"),
+    }
+    if task.get("params"):
+        intent["params"] = task["params"]
+    validate_intent(intent)
+
+    # Delegation chain verification (same as invoke)
+    verify_delegation(claims, settings.delegation_max_depth)
+
+    # OPA authorization per task using the orchestrator's claims
+    allow, reasons = await check_authz(claims, intent, agent_id, {
+        "time": int(time.time()),
+        "trace_id": trace_id,
+        "recent_calls": 0,
+        "delegation_depth": 0,
+    })
+
+    audit_writer.emit({
+        "event_type": "authz_decision",
+        "trace_id": trace_id,
+        "span_id": span_id,
+        "plan_id": plan_id,
+        "task_id": tid,
+        "caller_agent": claims.get("sub", ""),
+        "callee_agent": agent_id,
+        "action": intent["action"],
+        "resource": intent["resource"],
+        "decision": "allow" if allow else "deny",
+        "deny_reasons": reasons,
+    })
+
+    if not allow:
+        raise AuthzError("AUTHZ_SCOPE_EXCEEDED", f"task {tid!r} denied by policy: {reasons}")
+
     cfg = registry.get(agent_id)
     payload = json.dumps({"task_id": tid, "plan_id": plan_id, **task}).encode()
 
@@ -147,7 +197,8 @@ async def _run_task(
         path="/a2a/task",
         headers={"Content-Type": "application/json"},
         trace_id=trace_id,
-        span_id=uuid.uuid4().hex[:16],
+        span_id=span_id,
+        baggage=f"trace_id={trace_id},plan_id={plan_id},sub={claims.get('sub','')}",
     )
     response = await call_upstream(agent_id, cfg, payload, ctx)
 
