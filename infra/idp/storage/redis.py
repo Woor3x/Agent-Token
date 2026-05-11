@@ -79,9 +79,11 @@ async def publish(channel: str, message: str) -> int:
 
 async def incr_with_window(key: str, window_sec: int, limit: int) -> tuple[int, bool]:
     r = await get_redis()
-    count = await r.incr(key)
-    if count == 1:
-        await r.expire(key, window_sec)
+    pipe = r.pipeline()
+    pipe.incr(key)
+    pipe.expire(key, window_sec, nx=True)
+    results = await pipe.execute()
+    count = int(results[0])
     return count, count <= limit
 
 
