@@ -323,7 +323,45 @@ export default function ChatPage() {
               {msg.error ? (
                 <div><span className="font-medium">错误：</span>{msg.error}</div>
               ) : msg.role === "user" ? (
-                <div className="whitespace-pre-wrap">{msg.text}</div>
+                <div className="space-y-1.5">
+                  {msg.sources && msg.sources.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {msg.sources.map((s, si) => {
+                        const href = selUrl(s);
+                        const label = selLabel(s);
+                        const tag =
+                          s.kind === "docx"
+                            ? "文档"
+                            : s.table_id
+                            ? "表"
+                            : "整选";
+                        const chip = (
+                          <span
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/40 text-white/95 text-[11px] max-w-[16rem]"
+                            title={label}
+                          >
+                            <span className="text-[10px] uppercase tracking-wide opacity-80">{tag}</span>
+                            <span className="truncate">{label}</span>
+                          </span>
+                        );
+                        return href && href !== "#" ? (
+                          <a
+                            key={si}
+                            href={href}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="hover:underline"
+                          >
+                            {chip}
+                          </a>
+                        ) : (
+                          <span key={si}>{chip}</span>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="whitespace-pre-wrap">{msg.text}</div>
+                </div>
               ) : (
                 <>
                   {/* Doc content */}

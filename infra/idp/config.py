@@ -41,8 +41,10 @@ settings = Settings()
 
 ACTION_ENUM: set[str] = {
     "feishu.bitable.read",
+    "feishu.bitable.read_all",
     "feishu.contact.read",
     "feishu.calendar.read",
+    "feishu.docx.read",
     "feishu.doc.write",
     "web.search",
     "web.fetch",
@@ -51,8 +53,10 @@ ACTION_ENUM: set[str] = {
 
 RESOURCE_REGEX: dict[str, re.Pattern] = {
     "feishu.bitable.read": re.compile(r"^app_token:[^/]+/table:[^/]+$|^app_token:\*/table:\*$|^app_token:[^/]*/table:\*$"),
+    "feishu.bitable.read_all": re.compile(r"^app_token:[^/]+$|^app_token:\*$"),
     "feishu.contact.read": re.compile(r"^department:.+$|^department:\*$"),
     "feishu.calendar.read": re.compile(r"^calendar:.+$|^calendar:\*$"),
+    "feishu.docx.read": re.compile(r"^document_id:.+$|^document_id:\*$"),
     "feishu.doc.write": re.compile(r"^doc_token:.+$|^doc_token:\*$"),
     "web.search": re.compile(r"^\*$|^https?://.+"),
     "web.fetch": re.compile(r"^https://.+|^https://\*$"),
@@ -61,8 +65,10 @@ RESOURCE_REGEX: dict[str, re.Pattern] = {
 
 EXECUTOR_MAP: dict[str, str] = {
     "feishu.bitable.read": "data_agent",
+    "feishu.bitable.read_all": "data_agent",
     "feishu.contact.read": "data_agent",
     "feishu.calendar.read": "data_agent",
+    "feishu.docx.read": "data_agent",
     "feishu.doc.write": "doc_assistant",
     "web.search": "web_agent",
     "web.fetch": "web_agent",
