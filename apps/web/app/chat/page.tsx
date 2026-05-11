@@ -14,6 +14,7 @@ import {
 import { useChatStore } from "@/lib/store";
 import type { ChatResponse, DagTask } from "@/types";
 import Markdown from "@/components/Markdown";
+import { ExecutionFlow } from "@/components/ExecutionFlow";
 
 function extractContent(resp: ChatResponse): string {
   // Prefer explicit doc content string (legacy shape).
@@ -47,6 +48,12 @@ export default function ChatPage() {
   const router = useRouter();
   const { messages, taskStatus, addMessage, setTaskStatus, clearMessages } = useChatStore();
   const loading = taskStatus === "running";
+  const [flowKey, setFlowKey] = useState(0);
+  // flowVisible stays true for FLOW_LINGER_MS after the task completes so
+  // that late-arriving SSE events (delayed by network / batch flush) can still
+  // render in the timeline before the component unmounts.
+  const [flowVisible, setFlowVisible] = useState(false);
+  const lingerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [input, setInput] = useState("");
   const [expanded, setExpanded] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -80,6 +87,29 @@ export default function ChatPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Linger: keep the ExecutionFlow visible for 2 s after the task finishes so
+  // that SSE events delayed by batch-flush latency can still appear.
+  const FLOW_LINGER_MS = 2000;
+  useEffect(() => {
+    if (loading) {
+      // New task starting — show the flow immediately and cancel any pending hide.
+      setFlowVisible(true);
+      if (lingerTimerRef.current) {
+        clearTimeout(lingerTimerRef.current);
+        lingerTimerRef.current = null;
+      }
+    } else if (flowVisible) {
+      // Task just finished — schedule hide after linger period.
+      lingerTimerRef.current = setTimeout(
+        () => setFlowVisible(false),
+        FLOW_LINGER_MS
+      );
+    }
+    return () => {
+      if (lingerTimerRef.current) clearTimeout(lingerTimerRef.current);
+    };
+  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function selLabel(s: BitableSelection): string {
     if (s.name) return s.name;
@@ -155,6 +185,12 @@ export default function ChatPage() {
     setInput("");
     const picked = bitables.length > 0 ? [...bitables] : undefined;
     addMessage({ role: "user", text: prompt, sources: picked });
+    setFlowKey((k) => k + 1);
+    setFlowVisible(true);
+    if (lingerTimerRef.current) {
+      clearTimeout(lingerTimerRef.current);
+      lingerTimerRef.current = null;
+    }
     setTaskStatus("running");
 
     try {
@@ -265,14 +301,13 @@ export default function ChatPage() {
           </div>
         )}
 
-        {/* Banner shown when user returns to the page while a task is still running */}
-        {taskStatus === "running" && messages.length > 0 && (
-          <div className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-            <svg className="w-3.5 h-3.5 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-            </svg>
-            任务处理中，请稍候…
+        {/* Execution flow — shown while task runs AND for 2 s after it finishes
+            (linger) so late-arriving SSE events can still populate the timeline.
+            Only shown as an "above-messages" banner when the user returned to
+            the page mid-task (messages.length > 0 and flow not inline yet). */}
+        {flowVisible && messages.length > 0 && !loading && (
+          <div className="flex justify-start max-w-[85%]">
+            <ExecutionFlow key={flowKey} active={false} />
           </div>
         )}
 
@@ -338,15 +373,11 @@ export default function ChatPage() {
           </div>
         ))}
 
-        {loading && (
-          <div className="flex justify-start">
-            <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-500 flex items-center gap-2">
-              <svg className="w-4 h-4 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
-              <span className="animate-pulse">文档助手处理中…</span>
-            </div>
+        {/* Inline timeline — shown while the task is running AND for the linger
+            period after completion so delayed SSE events still appear. */}
+        {flowVisible && (
+          <div className="flex justify-start max-w-[85%]">
+            <ExecutionFlow key={flowKey} active={loading} />
           </div>
         )}
 
