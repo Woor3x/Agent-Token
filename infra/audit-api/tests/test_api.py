@@ -68,7 +68,7 @@ async def api():
     settings.batch_size = 1
     settings.flush_interval_ms = 10
     settings.backup_dir = "/tmp/audit_test_backup"
-    settings.sse_heartbeat_sec = 1
+    settings.sse_heartbeat_sec = 0.05
 
     import db as _db_mod
     import writer as _writer_mod
@@ -388,22 +388,46 @@ class TestHealthz:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestSSE:
+    # NOTE: httpx.ASGITransport buffers the entire response body before returning
+    # a Response object (see httpx/_transports/asgi.py: `await self.app(scope, receive, send)`).
+    # Infinite SSE streams never complete, so these tests require a live uvicorn server.
+    # Run with: LIVE_AUDIT_URL=http://localhost:8090 pytest -k sse
+
+    @pytest.mark.skipif(
+        not __import__("os").getenv("LIVE_AUDIT_URL"),
+        reason="SSE tests require a live server: set LIVE_AUDIT_URL=http://localhost:8090",
+    )
     async def test_sse_connected_event_received(self, api):
         """连接建立后应立即收到 event: connected。"""
-        async with api.stream("GET", "/audit/stream", headers=SVC_HDR) as r:
-            assert r.status_code == 200
-            async for line in r.aiter_lines():
-                if line:
-                    assert "connected" in line
-                    break
+        import httpx, os
+        base = os.environ["LIVE_AUDIT_URL"]
+        # Use live-server tokens if provided, otherwise fall back to ASGITransport test tokens
+        svc_token = os.getenv("LIVE_SVC_TOKEN", SVC_HDR["Authorization"].split()[-1])
+        live_svc_hdr = {"Authorization": f"Bearer {svc_token}"}
+        async with httpx.AsyncClient(base_url=base) as client:
+            lines: list[str] = []
+            async with client.stream("GET", "/audit/stream", headers=live_svc_hdr) as r:
+                assert r.status_code == 200
+                async for line in r.aiter_lines():
+                    if line:
+                        lines.append(line)
+                        break
+            assert lines and "connected" in lines[0]
 
+    @pytest.mark.skipif(
+        not __import__("os").getenv("LIVE_AUDIT_URL"),
+        reason="SSE tests require a live server: set LIVE_AUDIT_URL=http://localhost:8090",
+    )
     async def test_sse_admin_token_accepted(self, api):
-        async with api.stream("GET", "/audit/stream", headers=ADMIN_HDR) as r:
-            assert r.status_code == 200
-            async for line in r.aiter_lines():
-                if line:
-                    break
+        import httpx, os
+        base = os.environ["LIVE_AUDIT_URL"]
+        admin_token = os.getenv("LIVE_ADMIN_TOKEN", ADMIN_HDR["Authorization"].split()[-1])
+        live_admin_hdr = {"Authorization": f"Bearer {admin_token}"}
+        async with httpx.AsyncClient(base_url=base) as client:
+            async with client.stream("GET", "/audit/stream", headers=live_admin_hdr) as r:
+                assert r.status_code == 200
 
     async def test_sse_no_token_rejected(self, api):
+        """无 token 拒绝（不涉及流式读取，可用 ASGITransport 测试）。"""
         r = await api.get("/audit/stream")
         assert r.status_code == 401

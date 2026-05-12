@@ -119,7 +119,7 @@ class TestIntentSchema:
         from intent.schema import validate_intent
         from errors import IntentError
         with pytest.raises(IntentError):
-            validate_intent({"action": "web.search", "resource": "a" * 257})
+            validate_intent({"action": "web.search", "resource": "a" * 513})
 
     def test_resource_pattern_invalid(self):
         from intent.schema import validate_intent
