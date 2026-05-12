@@ -3,8 +3,22 @@ package agent.authz
 import future.keywords.if
 import future.keywords.in
 
+# DEPRECATED — plan_allow is no longer called by IdP /plan/validate.
+#
+# Reason: having two independent OPA decision paths (plan_allow here and
+# authz.allow in a2a.rego) with different input schemas and different glob
+# separators ([":", "/", "*"] vs [":", "/"]) could produce contradictory
+# decisions for the same request.  The authoritative policy enforcement is
+# done once, by Gateway, via authz.allow at execution time.
+#
+# /plan/validate now performs only IdP-local checks (delegation, executor,
+# scope intersection) and no longer queries OPA.
+#
+# This file is retained so the OPA bundle continues to load without errors.
+# It will be removed in a future cleanup commit once all references are gone.
+#
 # ─────────────────────────────────────────────────────────────────────────────
-# plan_allow：DAG 批量决策（IdP /plan/validate 调用）
+# plan_allow：DAG 批量决策（已废弃，不再被 IdP 调用）
 #
 # input 结构：
 #   orchestrator: { agent_id, caps: [{action, resource_pattern}] }

@@ -1,4 +1,3 @@
-import time
 from typing import Optional
 
 from fastapi import APIRouter, Request
@@ -7,8 +6,7 @@ from pydantic import BaseModel
 from agents.loader import get_agent_capability
 from audit.writer import get_audit_writer
 from config import settings
-from errors import InvalidRequest, OpaUnavailable
-from plan.opa_client import build_plan_input, query_opa_plan
+from errors import InvalidRequest
 from token_exchange.delegation import check_delegation, check_orchestrator_can_invoke
 from token_exchange.executor import check_executor
 from token_exchange.intent import extract_target_agent, parse_scope
@@ -50,24 +48,22 @@ class PlanValidateResponse(BaseModel):
 
 @router.post("/plan/validate", response_model=PlanValidateResponse)
 async def validate_plan(request: Request, body: PlanValidateRequest):
-    # ── Phase 1: IdP local checks for each task ──────────────────────────────
-    # Collect per-task: local deny reasons, effective_scope, and OPA task dict.
+    # IdP local checks only: delegation legitimacy, executor mapping, scope intersection.
+    #
+    # Design note: OPA is the authoritative PDP and is enforced by Gateway at execution
+    # time via authz.allow.  Calling plan_allow here (the old Phase 2) created two
+    # independent OPA decision paths with different input schemas and glob separators,
+    # leading to contradictory decisions on the same request.
+    #
+    # This endpoint now only answers: "can the IdP *issue* tokens for every task in
+    # this plan?"  Gateway remains the single point of OPA policy enforcement.
 
-    local_reasons: dict[str, list[str]] = {}   # task_id → [reason, ...]
-    effective_scopes: dict[str, list[str]] = {} # task_id → [scope, ...]
-    opa_tasks: list[dict] = []                  # built for the OPA batch call
-
-    # Use the first task's orchestrator / user as the plan-level identity.
-    # (All tasks in one plan belong to the same delegated request.)
-    plan_orchestrator_id = body.tasks[0].orchestrator_id if body.tasks else ""
-    plan_user_sub = body.tasks[0].user_id if body.tasks else ""
-    orch_caps: list[dict] = []
+    local_reasons: dict[str, list[str]] = {}    # task_id → [reason, ...]
+    effective_scopes: dict[str, list[str]] = {}  # task_id → [scope, ...]
 
     for task in body.tasks:
         reasons: list[str] = []
         effective_scope: list[str] = []
-        action = ""
-        resource_value = ""
 
         try:
             action, resource_value = parse_scope(task.scope)
@@ -80,13 +76,6 @@ async def validate_plan(request: Request, body: PlanValidateRequest):
             orch_cap = get_agent_capability(task.orchestrator_id)
             if orch_cap is None:
                 raise InvalidRequest(f"Unknown orchestrator: {task.orchestrator_id}")
-
-            # Capture orchestrator capabilities once (from first task).
-            if not orch_caps:
-                orch_caps = [
-                    {"action": c.action, "resource_pattern": c.resource_pattern}
-                    for c in orch_cap.capabilities
-                ]
 
             check_orchestrator_can_invoke(orch_cap, target_agent_id)
             check_delegation(task.orchestrator_id, target_agent_id, callee_cap)
@@ -108,50 +97,12 @@ async def validate_plan(request: Request, body: PlanValidateRequest):
         local_reasons[task.task_id] = reasons
         effective_scopes[task.task_id] = effective_scope
 
-        opa_tasks.append({
-            "id":       task.task_id,
-            "agent":    task.callee_id,
-            "action":   action,
-            "resource": resource_value,
-        })
-
-    # ── Phase 2: single OPA batch call ───────────────────────────────────────
-
-    opa_result: dict = {}
-    opa_error: Optional[str] = None
-
-    try:
-        opa_input = build_plan_input(
-            orchestrator_id=plan_orchestrator_id,
-            orch_caps=orch_caps,
-            user_sub=plan_user_sub,
-            tasks=opa_tasks,
-        )
-        opa_result = await query_opa_plan(opa_input)
-    except OpaUnavailable as exc:
-        opa_error = str(exc)
-
-    # Build per_task lookup from OPA response.
-    per_task_map: dict[str, dict] = {}
-    if opa_result:
-        for opa_task in opa_result.get("per_task", []):
-            per_task_map[opa_task["id"]] = opa_task
-
-    # ── Phase 3: merge local + OPA decisions ─────────────────────────────────
-
+    # Assemble per-task decisions from local checks alone.
     task_decisions: list[TaskDecision] = []
     overall_allow = True
 
     for task in body.tasks:
         reasons = list(local_reasons.get(task.task_id, []))
-
-        if opa_error:
-            reasons.append(f"opa_unavailable: {opa_error}")
-        else:
-            opa_task = per_task_map.get(task.task_id, {})
-            if not opa_task.get("allow", False):
-                reasons.extend(opa_task.get("reasons", ["opa_denied"]))
-
         decision = "allow" if not reasons else "deny"
         if decision == "deny":
             overall_allow = False
@@ -172,10 +123,10 @@ async def validate_plan(request: Request, body: PlanValidateRequest):
         "trace_id": body.trace_id,
         "decision": overall,
         "payload": {
-            "plan_id":    body.plan_id,
-            "task_count": len(body.tasks),
-            "overall":    overall,
-            "policy_version": opa_result.get("policy_version", settings.policy_version),
+            "plan_id":        body.plan_id,
+            "task_count":     len(body.tasks),
+            "overall":        overall,
+            "policy_version": settings.policy_version,
         },
     })
 

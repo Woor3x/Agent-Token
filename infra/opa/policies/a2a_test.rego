@@ -155,58 +155,6 @@ test_deny_dpop_unbound if {
     "dpop_unbound" in reasons
 }
 
-# ── test 7: plan_allow 批量全通过 ─────────────────────────────────────────────
-
-_plan_data := object.union(_base_data, {"users": {
-    "alice": {
-        "permissions": [
-            {"action": "feishu.bitable.read", "resource_pattern": "app_token:*/table:*"},
-            {"action": "feishu.doc.write",    "resource_pattern": "doc_token:*"},
-        ],
-    },
-}})
-
-test_plan_allow_batch if {
-    plan_input := {
-        "orchestrator": {
-            "agent_id": "doc_assistant",
-            "caps": [
-                {"action": "feishu.bitable.read", "resource_pattern": "app_token:*/table:*"},
-            ],
-        },
-        "user": {"sub": "alice"},
-        "plan": [
-            {"id": "t1", "agent": "data_agent",  "action": "feishu.bitable.read", "resource": "app_token:myapp/table:tbl1"},
-        ],
-        "context": {"time": _now, "delegation_depth": 1},
-    }
-    result := data.agent.authz.plan_allow with input as plan_input with data as _plan_data
-    result.overall == "allow"
-    count(result.per_task) == 1
-    result.per_task[0].allow == true
-}
-
-# ── test 8: plan_allow 部分 task 失败 → overall=deny ─────────────────────────
-
-test_plan_deny_partial if {
-    plan_input := {
-        "orchestrator": {
-            "agent_id": "doc_assistant",
-            "caps": [
-                {"action": "feishu.bitable.read", "resource_pattern": "app_token:*/table:*"},
-            ],
-        },
-        "user": {"sub": "alice"},
-        "plan": [
-            {"id": "t1", "agent": "data_agent", "action": "feishu.bitable.read", "resource": "app_token:myapp/table:tbl1"},
-            # t2: web_agent can't execute feishu.bitable.read → executor_mismatch
-            {"id": "t2", "agent": "web_agent",  "action": "feishu.bitable.read", "resource": "app_token:myapp/table:tbl2"},
-        ],
-        "context": {"time": _now, "delegation_depth": 1},
-    }
-    result := data.agent.authz.plan_allow with input as plan_input with data as _plan_data
-    result.overall == "deny"
-    t2 := [t | some t in result.per_task; t.id == "t2"][0]
-    t2.allow == false
-    "executor_mismatch" in t2.reasons
-}
+# test 7 (test_plan_allow_batch) and test 8 (test_plan_deny_partial) have been
+# removed.  plan_allow is no longer called by IdP /plan/validate; Gateway's
+# authz.allow is the single OPA enforcement point.  See plan.rego for details.
