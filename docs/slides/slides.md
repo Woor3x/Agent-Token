@@ -4,15 +4,18 @@ title: A2A-Token-System · 决赛答辩
 info: |
   A2A-Token-System · 面向多 Agent 协作的零信任授权平台
   飞书 AI 校园挑战赛 决赛 2026
-class: text-center
+class: text-left
 highlighter: shiki
 lineNumbers: false
-transition: slide-left
+transition: fade
 mdc: true
-colorSchema: light
+colorSchema: dark
 fonts:
-  sans: 'Inter, PingFang SC, sans-serif'
-  mono: 'JetBrains Mono'
+  sans: 'IBM Plex Sans, Source Han Sans SC, system-ui, sans-serif'
+  serif: 'Fraunces, Source Han Serif SC, serif'
+  mono: 'JetBrains Mono, monospace'
+  weights: '300,400,500,600,700'
+  italic: true
 download: true
 exportFilename: a2a-token-system-defense
 drawings:
@@ -20,170 +23,522 @@ drawings:
 ---
 
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
 :root {
-  --slidev-theme-primary: #3370FF;
+  --bg: #0E1116;
+  --bg-card: #161B22;
+  --bg-elev: #1C2128;
+  --line: #2D333B;
+  --line-soft: #21262D;
+  --text: #E6E1D7;
+  --text-mute: #9CA3AF;
+  --text-dim: #6B7280;
+  --accent: #F59E0B;
+  --accent-soft: #FCD34D;
+  --ok: #10B981;
+  --warn: #F43F5E;
 }
-.slidev-layout h1 {
-  color: #1F2329;
-  letter-spacing: -0.01em;
-}
+
 .slidev-layout {
-  font-family: 'PingFang SC', 'Inter', system-ui, sans-serif;
-  color: #1F2329;
+  background: var(--bg) !important;
+  color: var(--text);
+  font-family: 'IBM Plex Sans', 'Source Han Sans SC', system-ui, sans-serif;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  padding: 2.5rem 3.5rem;
 }
-.slidev-layout .text-gray-500,
-.slidev-layout .text-gray-600,
-.slidev-layout .text-gray-700 {
-  color: #646A73;
+
+.slidev-layout h1,
+.slidev-layout h2,
+.slidev-layout h3 {
+  font-family: 'Fraunces', 'Source Han Serif SC', serif;
+  color: var(--text);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  font-variation-settings: "opsz" 60;
 }
-.slidev-layout .text-gray-400 {
-  color: #8F959E;
+
+.slidev-layout h1 {
+  font-size: 2.4rem;
+  line-height: 1.15;
+  font-weight: 500;
+  position: relative;
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--accent);
+  margin-bottom: 0.4rem;
 }
-/* Card style: Feishu uses soft elevation + rounded-lg */
-.slidev-layout [class*="border-"] {
-  box-shadow: 0 1px 2px rgba(31, 35, 41, 0.04), 0 1px 3px rgba(31, 35, 41, 0.06);
+
+.slidev-layout h2 {
+  font-size: 1.5rem;
+  font-weight: 500;
 }
-/* Feishu blue accents */
-.slidev-layout .bg-blue-50 { background-color: #F0F4FF !important; }
-.slidev-layout .border-blue-200 { border-color: #3370FF !important; border-opacity: 0.3; }
-/* Mermaid sizing override */
-.slidev-layout .mermaid svg {
-  max-width: 100%;
-  height: auto;
+
+.slidev-layout h3 {
+  font-size: 1.05rem;
+  font-weight: 500;
+  letter-spacing: 0;
 }
-code {
-  background-color: #F5F6F7;
-  color: #1F2329;
-  padding: 1px 4px;
+
+.slidev-layout code {
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--bg-elev);
+  color: var(--accent-soft);
+  padding: 1px 6px;
   border-radius: 3px;
-  font-size: 0.9em;
+  font-size: 0.85em;
+  border: 1px solid var(--line-soft);
+}
+
+.slidev-layout pre, .slidev-layout pre code {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.slidev-layout .eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--text-dim);
+  margin-bottom: 0.5rem;
+}
+
+.slidev-layout .page-num {
+  position: absolute;
+  top: 1.6rem;
+  right: 2.2rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+}
+
+.slidev-layout .page-anchor {
+  position: absolute;
+  top: 1.6rem;
+  left: 3.5rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  letter-spacing: 0.06em;
+}
+
+.slidev-layout .hr-soft {
+  height: 1px;
+  background: var(--line-soft);
+  margin: 0.6rem 0 1.2rem 0;
+}
+
+.slidev-layout .stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.slidev-layout .stat-num {
+  font-family: 'Fraunces', serif;
+  font-size: 3.2rem;
+  font-weight: 400;
+  font-variation-settings: "opsz" 144;
+  color: var(--accent);
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.slidev-layout .stat-label {
+  font-size: 0.75rem;
+  color: var(--text-mute);
+  letter-spacing: 0.04em;
+}
+
+.slidev-layout .card {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1rem;
+}
+
+.slidev-layout .card-title {
+  font-family: 'Fraunces', serif;
+  font-weight: 500;
+  font-size: 1rem;
+  margin-bottom: 0.4rem;
+}
+
+.slidev-layout .card-mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin-bottom: 0.35rem;
+}
+
+.slidev-layout .card-body {
+  font-size: 0.8rem;
+  color: var(--text-mute);
+  line-height: 1.55;
+}
+
+.slidev-layout .pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  color: var(--text-mute);
+}
+
+.slidev-layout .pill-accent {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.slidev-layout .pill-ok { border-color: var(--ok); color: var(--ok); }
+.slidev-layout .pill-warn { border-color: var(--warn); color: var(--warn); }
+
+.slidev-layout .accent { color: var(--accent); }
+.slidev-layout .ok-c { color: var(--ok); }
+.slidev-layout .warn-c { color: var(--warn); }
+.slidev-layout .mute { color: var(--text-mute); }
+.slidev-layout .dim { color: var(--text-dim); }
+
+.slidev-layout .toc-row {
+  display: grid;
+  grid-template-columns: 3rem 1fr auto;
+  align-items: baseline;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.slidev-layout .toc-num {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
+.slidev-layout .toc-title {
+  font-family: 'Fraunces', serif;
+  font-size: 1.05rem;
+  color: var(--text);
+}
+
+.slidev-layout .toc-meta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.slidev-layout table {
+  font-size: 0.78rem;
+  border-collapse: collapse;
+}
+
+.slidev-layout th, .slidev-layout td {
+  border-bottom: 1px solid var(--line-soft);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.slidev-layout th {
+  font-family: 'Fraunces', serif;
+  font-weight: 500;
+  color: var(--text);
+  border-bottom-color: var(--line);
+}
+
+.slidev-layout td { color: var(--text-mute); }
+
+.slidev-layout .mermaid {
+  filter: invert(0);
+}
+
+.slidev-layout .quote {
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 1.3rem;
+  color: var(--text);
+  line-height: 1.45;
+  border-left: 2px solid var(--accent);
+  padding-left: 1rem;
 }
 </style>
 
-<!-- P1 · 封面 · § 一、 -->
+<!-- ============================================================ -->
+<!-- P1 · 封面 -->
 
-<div class="absolute top-4 right-6 text-xs text-gray-400">§ 一、</div>
+<div class="page-num">01 / 13</div>
 
-<div class="text-center mt-12">
+<div class="h-full flex flex-col justify-center">
 
-# A2A-Token-System
+<div class="eyebrow">飞书 AI 校园挑战赛 · 决赛 2026</div>
 
-<div class="text-2xl text-gray-600 mt-4 mb-12">面向多 Agent 协作的零信任授权平台</div>
+<h1 style="border-left: none; padding-left: 0; font-size: 3.4rem; line-height: 1.05; margin-top: 0.8rem;">
+A2A-Token-<span class="accent">System</span>
+</h1>
 
-<div class="grid grid-cols-3 gap-4 max-w-2xl mx-auto mb-8">
-  <div class="p-3 rounded border border-blue-200 bg-blue-50">
-    <div class="font-bold text-base">陈奕燔</div>
-    <div class="text-xs text-gray-500">组长 · IdP / OPA</div>
+<div class="text-xl mute mt-3" style="font-family: 'Fraunces', serif; font-style: italic;">
+面向多 Agent 协作的<span class="accent">零信任</span>授权平台
+</div>
+
+<div class="hr-soft mt-8" style="max-width: 32rem;"></div>
+
+<div class="grid grid-cols-3 gap-6 mt-6 max-w-2xl text-sm">
+  <div>
+    <div class="dim text-xs" style="font-family: 'JetBrains Mono', monospace;">LEAD</div>
+    <div style="font-family: 'Fraunces', serif; font-size: 1.1rem;">陈奕燔</div>
+    <div class="mute text-xs">IdP · OPA</div>
   </div>
-  <div class="p-3 rounded border border-blue-200 bg-blue-50">
-    <div class="font-bold text-base">周展鹏</div>
-    <div class="text-xs text-gray-500">Gateway / Web / Audit</div>
+  <div>
+    <div class="dim text-xs" style="font-family: 'JetBrains Mono', monospace;">ENGINEER</div>
+    <div style="font-family: 'Fraunces', serif; font-size: 1.1rem;">周展鹏</div>
+    <div class="mute text-xs">Gateway · Web · Audit</div>
   </div>
-  <div class="p-3 rounded border border-blue-200 bg-blue-50">
-    <div class="font-bold text-base">金梓墨</div>
-    <div class="text-xs text-gray-500">Agents / SDK / 飞书</div>
+  <div>
+    <div class="dim text-xs" style="font-family: 'JetBrains Mono', monospace;">ENGINEER</div>
+    <div style="font-family: 'Fraunces', serif; font-size: 1.1rem;">金梓墨</div>
+    <div class="mute text-xs">Agents · SDK · 飞书接入</div>
   </div>
 </div>
 
-<div class="text-sm text-gray-500">杭州电子科技大学 · 飞书 AI 校园挑战赛 决赛 2026</div>
-<div class="text-xs text-gray-400 mt-2">github.com/your-org/A2A-Token-System</div>
+<div class="mt-10 dim text-xs" style="font-family: 'JetBrains Mono', monospace;">
+HDU · github.com/your-org/A2A-Token-System
+</div>
 
 </div>
 
 <!--
-开场 15s：
-- 项目名 · 一句副标点出"零信任 + 多 Agent + 授权"
-- 三人分工先快速亮一下
-- 然后翻页进入项目结果
+P1 15s — 开场：项目名 / 副标 / 三人 / 单位 + 仓库
 -->
 
 ---
 
-<!-- P2 · 核心代码模块速览 · § 二-1-1) -->
+<!-- ============================================================ -->
+<!-- P2 · 汇报目录 -->
 
-<div class="absolute top-4 right-6 text-xs text-gray-400">§ 二-1-1)</div>
+<div class="page-num">02 / 13</div>
+<div class="page-anchor">§ AGENDA</div>
 
-# 核心代码模块速览
+<div class="eyebrow">汇报流程</div>
+<h1>从问题到答案 · 六章节</h1>
+<div class="hr-soft"></div>
 
-<div class="grid grid-cols-4 gap-3 mt-6 text-sm">
+<div class="grid grid-cols-2 gap-x-12 mt-4">
 
-<div class="p-3 rounded border border-rose-200 bg-rose-50">
-  <div class="font-bold">IdP</div>
-  <div class="text-xs text-gray-500 font-mono">/token/exchange</div>
-  <div class="text-xs mt-1">三验签发委托 token · 按需最小权限</div>
+<div>
+  <div class="toc-row">
+    <div class="toc-num">01</div>
+    <div class="toc-title">背景 — AI Agent 时代的授权困局</div>
+    <div class="toc-meta">~35s</div>
+  </div>
+  <div class="toc-row">
+    <div class="toc-num">02</div>
+    <div class="toc-title">问题分析 — OAuth 在 A2A 的失能</div>
+    <div class="toc-meta">~45s</div>
+  </div>
+  <div class="toc-row">
+    <div class="toc-num">03</div>
+    <div class="toc-title">解决方案 — A2A-Token-System</div>
+    <div class="toc-meta">~30s</div>
+  </div>
 </div>
 
-<div class="p-3 rounded border border-rose-200 bg-rose-50">
-  <div class="font-bold">Gateway</div>
-  <div class="text-xs text-gray-500 font-mono">authn_middleware</div>
-  <div class="text-xs mt-1">唯一入口 JWKS 验签 + per-call OPA 复核</div>
-</div>
-
-<div class="p-3 rounded border border-rose-200 bg-rose-50">
-  <div class="font-bold">OPA</div>
-  <div class="text-xs text-gray-500 font-mono">agent.authz / a2a.rego</div>
-  <div class="text-xs mt-1">Rego 10 条全 AND · 决策与代码解耦</div>
-</div>
-
-<div class="p-3 rounded border border-amber-200 bg-amber-50">
-  <div class="font-bold">Audit API</div>
-  <div class="text-xs text-gray-500 font-mono">BatchWriter</div>
-  <div class="text-xs mt-1">asyncio.Queue → SQLite 批写 + SSE 广播</div>
-</div>
-
-<div class="p-3 rounded border border-emerald-200 bg-emerald-50">
-  <div class="font-bold">SDK</div>
-  <div class="text-xs text-gray-500 font-mono">client.invoke</div>
-  <div class="text-xs mt-1">屏蔽 DPoP + TE · 三框架 adapter</div>
-</div>
-
-<div class="p-3 rounded border border-emerald-200 bg-emerald-50">
-  <div class="font-bold">doc_assistant</div>
-  <div class="text-xs text-gray-500 font-mono">dispatcher._topo_layers</div>
-  <div class="text-xs mt-1">LangGraph DAG 拓扑分层并发执行</div>
-</div>
-
-<div class="p-3 rounded border border-sky-200 bg-sky-50">
-  <div class="font-bold">data_agent / web_agent</div>
-  <div class="text-xs text-gray-500 font-mono">tool dispatcher</div>
-  <div class="text-xs mt-1">飞书 OpenAPI + Tavily 检索</div>
-</div>
-
-<div class="p-3 rounded border border-indigo-200 bg-indigo-50">
-  <div class="font-bold">Web 前端</div>
-  <div class="text-xs text-gray-500 font-mono">OIDC PKCE</div>
-  <div class="text-xs mt-1">RFC 7636 抗授权码截获</div>
+<div>
+  <div class="toc-row">
+    <div class="toc-num">04</div>
+    <div class="toc-title">整体设计 — 系统架构</div>
+    <div class="toc-meta">~50s</div>
+  </div>
+  <div class="toc-row">
+    <div class="toc-num">05</div>
+    <div class="toc-title">模块细分 — IdP / GW / Agents / Audit</div>
+    <div class="toc-meta">~175s</div>
+  </div>
+  <div class="toc-row">
+    <div class="toc-num">06</div>
+    <div class="toc-title">创新 · 对比 · 价值 · 谢幕</div>
+    <div class="toc-meta">~105s</div>
+  </div>
 </div>
 
 </div>
 
-<div class="text-center text-sm text-gray-500 mt-6">
-下一页看 7 模块如何协同 →
+<div class="mt-6 dim text-xs" style="font-family: 'JetBrains Mono', monospace;">
+TOTAL ≈ 475s · 8 min</div>
+
+<!--
+P2 15s — 目录扫一眼即过
+-->
+
+---
+
+<!-- ============================================================ -->
+<!-- P3 · 背景 -->
+
+<div class="page-num">03 / 13</div>
+<div class="page-anchor">§ 01 · BACKGROUND</div>
+
+<div class="eyebrow">01 · 背景</div>
+<h1>AI Agent 正以<span class="accent">用户身份</span>访问企业数据</h1>
+<div class="hr-soft"></div>
+
+<div class="grid grid-cols-3 gap-8 mt-8">
+
+<div class="stat">
+  <div class="stat-num">↑3×</div>
+  <div class="stat-label">2024-2026 企业 Agent 部署量增速</div>
+  <div class="text-xs mute mt-2">Gartner / IDC 多份报告</div>
+</div>
+
+<div class="stat">
+  <div class="stat-num">A2A</div>
+  <div class="stat-label">Agent-to-Agent 调用成主导模式</div>
+  <div class="text-xs mute mt-2">编排者 + 多执行者拓扑普及</div>
+</div>
+
+<div class="stat">
+  <div class="stat-num">∞</div>
+  <div class="stat-label">委托深度 = 攻击面平方级膨胀</div>
+  <div class="text-xs mute mt-2">单 Agent 失陷波及全链</div>
+</div>
+
+</div>
+
+<div class="hr-soft mt-10"></div>
+
+<div class="quote mt-6">
+"AI Agent 需以用户身份操作企业资源 — 但 OAuth 没有为<span class="accent">机器代机器</span>的细粒度委托而设计。"
 </div>
 
 <!--
-P2 35s：
-- 横扫 7 模块，让评委建立"这是 7 个独立组件的协作"心智
-- 配色：红=安全核心、橙=审计、绿=AI编排、蓝=业务Agent、紫=用户前端
-- 这套配色 P3 架构图节点继承
-- 结束句引向 P3
+P3 35s
+- 开局把"为什么这事重要"砸进评委脑子
+- 三个数字是定性引子，不需精确数值
+- 引语承接下一页 OAuth 失能分析
 -->
 
 ---
 
-<!-- P3 · 系统架构 · § 二-1-2) 设计 -->
+<!-- ============================================================ -->
+<!-- P4 · 问题分析 -->
 
-<div class="absolute top-4 right-6 text-xs text-gray-400">§ 二-1-2)</div>
+<div class="page-num">04 / 13</div>
+<div class="page-anchor">§ 02 · PROBLEM</div>
 
-# 系统架构
+<div class="eyebrow">02 · 问题分析</div>
+<h1>现有 OAuth 在 A2A 场景下的<span class="accent">四个失能</span></h1>
+<div class="hr-soft"></div>
 
-```mermaid {scale: 0.55}
+<div class="grid grid-cols-2 gap-5 mt-5">
+
+<div class="card">
+  <div class="card-mono">FAILURE 01 · 信任传递断裂</div>
+  <div class="card-title">无机器代机器细粒度授权</div>
+  <div class="card-body">OAuth access_token 只表达"用户 → 客户端"；缺失"用户 → Agent A → Agent B"链上身份与上下文，下游无法判定真实调用者。</div>
+</div>
+
+<div class="card">
+  <div class="card-mono">FAILURE 02 · 时效失控</div>
+  <div class="card-title">长生命期 token 与持有者凭证</div>
+  <div class="card-body">小时级 access_token + Bearer 模式，一旦泄露窗口期内可重放、横向渗透；缺乏 PoP（Proof-of-Possession）绑定。</div>
+</div>
+
+<div class="card">
+  <div class="card-mono">FAILURE 03 · 委托不可追</div>
+  <div class="card-title">链路审计缺失</div>
+  <div class="card-body">无标准化的委托链记录字段（actor / chain / trace），事后追责只能依赖应用层日志，跨 Agent 关联困难。</div>
+</div>
+
+<div class="card">
+  <div class="card-mono">FAILURE 04 · 权限放大</div>
+  <div class="card-title">scope 静态绑定 ≠ 任务最小</div>
+  <div class="card-body">scope 在 consent 时一次绑定，无法按"本次任务实际所需"动态收敛，给出的是"上限"而非"所需"。</div>
+</div>
+
+</div>
+
+<!--
+P4 45s
+- 四卡片，每卡 ~10s 念
+- 这页是"评委代入痛点"的核心，不要跳
+-->
+
+---
+
+<!-- ============================================================ -->
+<!-- P5 · 解决方案 -->
+
+<div class="page-num">05 / 13</div>
+<div class="page-anchor">§ 03 · SOLUTION</div>
+
+<div class="eyebrow">03 · 解决方案</div>
+<h1>A2A-Token-System · <span class="accent">三支柱</span>回应四失能</h1>
+<div class="hr-soft"></div>
+
+<div class="quote mt-6 mb-8">
+以 <span class="accent">IETF 标准协议</span> 为底座 · <span class="accent">最小权限交集</span> 为分配策略 · <span class="accent">全链审计</span> 为追责保证 — 构建<span class="accent">零信任 A2A 授权</span>平台。
+</div>
+
+<div class="grid grid-cols-3 gap-4 mt-8">
+
+<div>
+  <div class="card-mono accent">PILLAR I</div>
+  <div class="card-title mt-1">标准协议栈</div>
+  <div class="hr-soft" style="margin: 0.5rem 0;"></div>
+  <div class="card-body">
+    RFC 8693 委托链 · RFC 9449 DPoP 持有者证明 · RFC 7523 客户端断言 · RFC 7636 PKCE — 不造轮子，全栈复用。
+  </div>
+  <div class="mt-3 mute text-xs" style="font-family: 'JetBrains Mono', monospace;">→ 解 FAILURE 01·02</div>
+</div>
+
+<div>
+  <div class="card-mono accent">PILLAR II</div>
+  <div class="card-title mt-1">最小权限交集</div>
+  <div class="hr-soft" style="margin: 0.5rem 0;"></div>
+  <div class="card-body">
+    每次签发计算 callee_caps ∩ user_perms ∩ requested_scope · 120s 一次性令牌 · 6 维即时撤销。
+  </div>
+  <div class="mt-3 mute text-xs" style="font-family: 'JetBrains Mono', monospace;">→ 解 FAILURE 04</div>
+</div>
+
+<div>
+  <div class="card-mono accent">PILLAR III</div>
+  <div class="card-title mt-1">全链审计</div>
+  <div class="hr-soft" style="margin: 0.5rem 0;"></div>
+  <div class="card-body">
+    W3C traceparent 全链传播 · Audit 记录 decision/reasons/jti/jkt · Gateway × OPA 每调用复核。
+  </div>
+  <div class="mt-3 mute text-xs" style="font-family: 'JetBrains Mono', monospace;">→ 解 FAILURE 03</div>
+</div>
+
+</div>
+
+<!--
+P5 30s — 简洁三支柱，每支柱挂回失能编号，让评委感觉"问题→答案"对得上
+-->
+
+---
+
+<!-- ============================================================ -->
+<!-- P6 · 整体架构 -->
+
+<div class="page-num">06 / 13</div>
+<div class="page-anchor">§ 04 · ARCHITECTURE</div>
+
+<div class="eyebrow">04 · 整体设计</div>
+<h1>系统架构 — 安全 / 编排 / 执行 三平面</h1>
+<div class="hr-soft"></div>
+
+```mermaid {scale: 0.58, theme: 'dark'}
 flowchart LR
   U[User<br/>Web 前端]:::user
-  IDP[IdP<br/>OIDC + TE]:::sec
-  GW[Gateway<br/>authn+OPA]:::sec
-  OPA[OPA<br/>Rego]:::sec
-  AUDIT[Audit API<br/>SQLite+SSE]:::audit
+  IDP[IdP<br/>OIDC + RFC 8693]:::sec
+  GW[Gateway<br/>authn + OPA 复核]:::sec
+  OPA[OPA<br/>a2a.rego]:::sec
+  AUDIT[Audit API<br/>BatchWriter + SSE]:::audit
   DOC[doc_assistant<br/>orchestrator]:::ai
   DATA[data_agent<br/>executor]:::ai
   WEB[web_agent<br/>executor]:::ai
@@ -193,7 +548,7 @@ flowchart LR
   U -->|OIDC PKCE| IDP
   U --> GW
   GW -.JWKS.- IDP
-  GW -->|per-call decide| OPA
+  GW -->|per-call| OPA
   GW --> DOC
   DOC -->|TE 委托| IDP
   DOC --> GW
@@ -201,531 +556,491 @@ flowchart LR
   GW --> WEB
   DATA --> FS
   WEB --> TAV
-  GW -.记录.- AUDIT
-  IDP -.记录.- AUDIT
+  GW -.audit.- AUDIT
+  IDP -.audit.- AUDIT
 
-  classDef sec fill:#fff1f2,stroke:#fb7185,stroke-width:1.5px
-  classDef audit fill:#fffbeb,stroke:#fbbf24,stroke-width:1.5px
-  classDef ai fill:#ecfdf5,stroke:#34d399,stroke-width:1.5px
-  classDef user fill:#eef2ff,stroke:#818cf8,stroke-width:1.5px
-  classDef ext fill:#f1f5f9,stroke:#64748b,stroke-width:1px
+  classDef sec fill:#1C2128,stroke:#F59E0B,stroke-width:1.5px,color:#E6E1D7
+  classDef audit fill:#1C2128,stroke:#FCD34D,stroke-width:1.5px,color:#E6E1D7
+  classDef ai fill:#1C2128,stroke:#10B981,stroke-width:1.5px,color:#E6E1D7
+  classDef user fill:#1C2128,stroke:#9CA3AF,stroke-width:1.5px,color:#E6E1D7
+  classDef ext fill:#161B22,stroke:#6B7280,stroke-width:1px,color:#9CA3AF
 ```
 
-<div class="text-xs text-gray-500 text-center mt-4">
-标准协议栈（OIDC + Token Exchange + DPoP）· 职责严格分离（orchestrator / executor 互斥）
+<div class="grid grid-cols-4 gap-3 mt-3 text-xs">
+  <div><span class="pill pill-accent">SEC</span> <span class="mute ml-1">IdP · GW · OPA</span></div>
+  <div><span class="pill" style="border-color: #FCD34D; color: #FCD34D;">AUDIT</span> <span class="mute ml-1">不可篡改之外，多维查询</span></div>
+  <div><span class="pill pill-ok">AI</span> <span class="mute ml-1">orchestrator + executor 互斥</span></div>
+  <div><span class="pill">EXT</span> <span class="mute ml-1">飞书 · Tavily</span></div>
 </div>
 
 <!--
-P3 50s：
-- 节点配色与 P2 模块卡片对齐
-- 强调三条主线：用户登录、Agent 间委托（TE）、per-call 鉴权
-- 引出下一页"三步走"展开数据流
+P6 50s — 镇展示页
+- 用 amber 框安全平面，绿框 AI 平面，灰框外部
+- 强调三条主线：User→IdP 登录、Agent→IdP TE、Gateway→OPA 决策
 -->
 
 ---
 
-<!-- P4 · 系统功能简述 · § 二-1-2) 简述 -->
+<!-- ============================================================ -->
+<!-- P7 · 模块① IdP + Token Exchange -->
 
-<div class="absolute top-4 right-6 text-xs text-gray-400">§ 二-1-2)</div>
+<div class="page-num">07 / 13</div>
+<div class="page-anchor">§ 05 · MODULE I</div>
 
-# 系统功能简述
+<div class="eyebrow">05.1 · 模块① · 身份与委托</div>
+<h1>IdP — Token Exchange 三验签发</h1>
+<div class="hr-soft"></div>
 
-<div class="grid grid-cols-3 gap-5 mt-6">
+<div class="grid grid-cols-5 gap-4 mt-4">
 
-<div class="p-4 rounded-lg border-2 border-indigo-200 bg-indigo-50">
-  <div class="text-3xl mb-1">①</div>
-  <div class="font-bold text-base mb-2">用户登录</div>
-  <div class="text-xs text-gray-700 leading-relaxed">
-    OIDC + PKCE（RFC 7636）<br/>
-    抗授权码截获<br/>
-    一次性 code → access_token
-  </div>
-</div>
+<div class="col-span-2">
 
-<div class="p-4 rounded-lg border-2 border-rose-200 bg-rose-50">
-  <div class="text-3xl mb-1">②</div>
-  <div class="font-bold text-base mb-2">Token Exchange</div>
-  <div class="text-xs text-gray-700 leading-relaxed">
-    RFC 8693 委托链<br/>
-    客户端 assertion + DPoP + 上游 token<br/>
-    <b>120s 一次性</b> · <code>one_time</code> 强制
-  </div>
-</div>
-
-<div class="p-4 rounded-lg border-2 border-emerald-200 bg-emerald-50">
-  <div class="text-3xl mb-1">③</div>
-  <div class="font-bold text-base mb-2">执行鉴权</div>
-  <div class="text-xs text-gray-700 leading-relaxed">
-    Gateway 验签 + per-call OPA<br/>
-    Rego 全 AND 决策<br/>
-    Audit 全程记录
-  </div>
-</div>
-
-</div>
-
-<div class="mt-8 p-3 rounded bg-amber-50 border border-amber-200 text-sm text-center">
-🔒 <b>AI 链路</b>（编排 / 调用 / 输出）与 <b>安全链路</b>（IdP / GW / OPA）<b>严格隔离</b> — AI 故障不污染授权决策
-</div>
-
-<!--
-P4 45s：
-- 用三栏对照 P3 三条主线，落到"做什么"
-- 强调 ② 的 120s 一次性是核心创新点之一
-- 底部隔离提示是技术亮点 — 为 P8 铺垫
--->
-
----
-
-<!-- P5 · Agents 实现 · § 二-1-2) 补充 -->
-
-<div class="absolute top-4 right-6 text-xs text-gray-400">§ 二-1-2)</div>
-
-# Agents 实现：编排者 + 执行者
-
-<div class="grid grid-cols-3 gap-3 mt-4 text-xs">
-
-<div class="p-3 rounded-lg border-2 border-emerald-200 bg-emerald-50">
-  <div class="font-bold text-sm mb-1">doc_assistant</div>
-  <div class="text-emerald-700 mb-2"><b>orchestrator</b></div>
-  <div class="space-y-1 text-gray-700">
-    <div>• LangGraph DAG 编排</div>
-    <div>• <code>planner</code>：LLM JSON mode + 规则回退</div>
-    <div>• <code>_topo_layers</code> 拓扑分层</div>
-    <div>• <code>asyncio.gather</code> 同层并发</div>
-    <div>• <code>validate_dag()</code> 失败重试</div>
-  </div>
-</div>
-
-<div class="p-3 rounded-lg border-2 border-sky-200 bg-sky-50">
-  <div class="font-bold text-sm mb-1">data_agent</div>
-  <div class="text-sky-700 mb-2"><b>executor</b></div>
-  <div class="space-y-1 text-gray-700">
-    <div>• Intent 路由（regex 匹配）</div>
-    <div>• 飞书 OpenAPI：bitable / docx / contact / calendar / drive</div>
-    <div>• Prompt Injection 清洗</div>
-    <div>• 无 LLM · 纯确定性</div>
-  </div>
-</div>
-
-<div class="p-3 rounded-lg border-2 border-sky-200 bg-sky-50">
-  <div class="font-bold text-sm mb-1">web_agent</div>
-  <div class="text-sky-700 mb-2"><b>executor</b></div>
-  <div class="space-y-1 text-gray-700">
-    <div>• <code>web.search</code> · Tavily 检索</div>
-    <div>• <code>web.fetch</code> · HTML 提取 + LLM 摘要</div>
-    <div>• URL allowlist 限制</div>
-    <div>• 速率限制 + 安全提取</div>
-  </div>
-</div>
-
-</div>
-
-<div class="mt-4 p-3 rounded bg-indigo-50 border border-indigo-200 text-xs">
-  <div class="font-bold text-sm mb-2">共享基础设施</div>
-  <div class="grid grid-cols-2 gap-2 text-gray-700">
-    <div>• <b>SDK</b>：屏蔽 RFC 8693 TE + RFC 9449 DPoP + W3C traceparent</div>
-    <div>• <b>AgentServer</b> 基类 · <code>capability.find()</code> 调用前匹配</div>
-    <div>• <code>@field_validator("role")</code> 强制 orchestrator / executor 互斥</div>
-    <div>• 三框架 adapter：LangChain · LangGraph · AutoGen</div>
-  </div>
-</div>
-
-<!--
-P5 Agents 实现 35s：
-- 一句一句过：doc_assistant 编排 / 两个 executor 执行
-- 重点：role 互斥是 SoD（职责分离）落地
-- adapter 三选一对应三种主流多 Agent 框架
-- 时长压缩：可秒过共享栏，重点在三卡
--->
-
----
-
-<!-- P5 · 项目亮点 ① 协议栈 + 零信任 A2A · § 二-1-3) -->
-
-<div class="absolute top-4 right-6 text-xs text-gray-400">§ 二-1-3) ①</div>
-
-# 亮点 ①：标准协议栈 + 零信任 A2A
-
-<div class="grid grid-cols-6 gap-2 mb-4 text-xs">
-  <div class="p-2 rounded border border-gray-300 bg-white text-center">
-    <div class="font-bold">RFC 7519</div><div class="text-gray-500">JWT</div>
-  </div>
-  <div class="p-2 rounded border border-gray-300 bg-white text-center">
-    <div class="font-bold">RFC 7523</div><div class="text-gray-500">Client Assertion</div>
-  </div>
-  <div class="p-2 rounded border border-gray-300 bg-white text-center">
-    <div class="font-bold">RFC 7636</div><div class="text-gray-500">PKCE</div>
-  </div>
-  <div class="p-2 rounded border border-gray-300 bg-white text-center">
-    <div class="font-bold">RFC 7638</div><div class="text-gray-500">JWK Thumbprint</div>
-  </div>
-  <div class="p-2 rounded border-2 border-rose-400 bg-rose-50 text-center">
-    <div class="font-bold">RFC 8693</div><div class="text-rose-600">Token Exchange ★</div>
-  </div>
-  <div class="p-2 rounded border-2 border-rose-400 bg-rose-50 text-center">
-    <div class="font-bold">RFC 9449</div><div class="text-rose-600">DPoP ★</div>
-  </div>
-</div>
-
-```mermaid {scale: 0.55}
+```mermaid {scale: 0.45, theme: 'dark'}
 sequenceDiagram
   participant C as Caller Agent
   participant I as IdP
   participant G as Gateway
-  participant T as Target Agent
-  C->>I: client_assertion (≤600s) + DPoP + 上游 token
-  I->>I: 三验：assertion / DPoP / scope ∩
-  I-->>C: one-shot token (120s, one_time)
-  C->>G: 调用 + DPoP proof
-  G->>G: JWKS 验签 + cnf.jkt 匹配
-  G->>T: 转发
-  G-->>Audit: jti / jkt / decision
+  C->>I: client_assertion + DPoP + upstream token
+  Note over I: 三验：assertion / subject / DPoP
+  Note over I: ∩ scope 交集
+  I-->>C: one-shot token<br/>(120s · one_time)
+  C->>G: invoke + DPoP proof
+  G->>G: JWKS + cnf.jkt
 ```
 
-<div class="grid grid-cols-3 gap-3 mt-2 text-xs">
-  <div class="p-2 rounded bg-blue-50 border border-blue-200">
-    <b>assertion</b> 证身份
-  </div>
-  <div class="p-2 rounded bg-blue-50 border border-blue-200">
-    <b>one-shot token</b> 防重放
-  </div>
-  <div class="p-2 rounded bg-blue-50 border border-blue-200">
-    <b>DPoP</b> 防盗用
-  </div>
 </div>
 
-<!--
-P5 55s：
-- 6 RFC 不念，扫一眼即可。重点钉两颗星：8693 与 9449
-- sequence 图主讲：IdP 三验 + Gateway cnf.jkt 复验
-- 时序图证明：标准协议栈，复用 IETF，没有自创轮子
--->
-
----
-
-<!-- P6 · 亮点 ② 最小权限 + 三道关 · § 二-1-3) -->
-
-<div class="absolute top-4 right-6 text-xs text-gray-400">§ 二-1-3) ②</div>
-
-# 亮点 ②：最小权限 + 三道关
-
-<div class="grid grid-cols-2 gap-6 mt-4">
+<div class="col-span-3 space-y-3">
 
 <div>
-  <div class="text-sm font-bold mb-2 text-gray-700">最小权限计算</div>
-  <div class="p-4 rounded-lg bg-gradient-to-br from-purple-50 to-blue-50 border-2 border-purple-200">
-    <div class="font-mono text-sm text-center my-2 leading-relaxed">
-      <span class="text-purple-700">effective_scope</span> =<br/>
-      <span class="text-rose-600">callee_caps</span> ∩<br/>
-      <span class="text-emerald-600">user_perms</span> ∩<br/>
-      <span class="text-amber-600">requested_scope</span>
-    </div>
-  </div>
-  <div class="text-xs mt-3 space-y-1">
-    <div>• <b>callee_caps</b>：被调端能力上限（注册时声明）</div>
-    <div>• <b>user_perms</b>：用户授权范围（OIDC consent）</div>
-    <div>• <b>requested_scope</b>：本次任务真正需要</div>
-  </div>
-  <div class="text-xs mt-3 p-2 bg-amber-50 rounded">三者全空 ⇒ 拒签 · 永不"宽给"</div>
+<div class="card-mono accent">RFC 8693 · TOKEN EXCHANGE</div>
+<div class="card-title">三大输入 · 三大验证</div>
+<div class="card-body">
+client_assertion 默认 60s（IdP 接受 ≤ 600s）<br/>
+DPoP proof 防盗用 · subject token 表达原始用户身份
+</div>
 </div>
 
 <div>
-  <div class="text-sm font-bold mb-2 text-gray-700">三道关防御</div>
-  <div class="space-y-2">
-    <div class="p-3 rounded border-l-4 border-rose-400 bg-rose-50">
-      <div class="font-bold text-sm">① IdP 签发关</div>
-      <div class="text-xs text-gray-600">事前 ABAC：subject / agent / action / context</div>
-    </div>
-    <div class="p-3 rounded border-l-4 border-orange-400 bg-orange-50">
-      <div class="font-bold text-sm">② Gateway × OPA 关</div>
-      <div class="text-xs text-gray-600">per-call Rego 10 条全 AND 复核</div>
-    </div>
-    <div class="p-3 rounded border-l-4 border-amber-400 bg-amber-50">
-      <div class="font-bold text-sm">③ Capability 匹配关</div>
-      <div class="text-xs text-gray-600">启动期注册声明 + 调用前 <code>capability.find()</code> 二次校验</div>
-    </div>
-  </div>
+<div class="card-mono accent">EFFECTIVE SCOPE</div>
+<div class="card-body" style="font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; line-height: 1.7;">
+<span style="color: var(--accent);">effective</span> = callee_caps<br/>
+<span style="padding-left: 5rem;">∩ user_perms</span><br/>
+<span style="padding-left: 5rem;">∩ requested_scope</span>
+</div>
+<div class="card-body mt-2">三集合任一为空 → 拒签。永不"宽给"。</div>
+</div>
+
+<div class="flex gap-2 mt-2">
+  <span class="pill pill-accent">120s · one_time</span>
+  <span class="pill">sub_jti 唯一</span>
+  <span class="pill">cnf.jkt 绑定</span>
+</div>
+
 </div>
 
 </div>
 
 <!--
-P6 55s：
-- 公式是"创新性"的钉子 — 三集合交集
-- 三道关展示"纵深防御"，回应技术深度评分
-- 注意：与 P5 是不同视觉布局（公式 vs 横向卡）避免审美疲劳
+P7 45s
+- 左 sequence + 右配方公式，最技术的一页
+- 钉两个数字：60s / 120s + 公式
 -->
 
 ---
 
-<!-- P7 · 亮点 ③ 撤销+职责+审计+生态 · § 二-1-3) -->
+<!-- ============================================================ -->
+<!-- P8 · 模块② Gateway + OPA -->
 
-<div class="absolute top-4 right-6 text-xs text-gray-400">§ 二-1-3) ③</div>
+<div class="page-num">08 / 13</div>
+<div class="page-anchor">§ 05 · MODULE II</div>
 
-# 亮点 ③：撤销 · 职责 · 审计 · 生态
+<div class="eyebrow">05.2 · 模块② · 唯一入口与策略复核</div>
+<h1>Gateway × OPA — <span class="accent">三道关</span>纵深防御</h1>
+<div class="hr-soft"></div>
 
-<div class="grid grid-cols-2 gap-4 mt-4 text-sm">
+<div class="grid grid-cols-3 gap-4 mt-4">
 
-<div class="p-3 rounded border border-rose-200 bg-rose-50">
-  <div class="font-bold mb-2">6 维即时撤销</div>
+<div class="card">
+  <div class="card-mono accent">GATE I</div>
+  <div class="card-title">IdP 签发关</div>
+  <div class="card-body">事前 ABAC：subject / agent / action / context 四属性匹配 · scope ∩ 计算 · 失败拒签。</div>
+  <div class="mt-3 dim text-xs" style="font-family: 'JetBrains Mono', monospace;">infra/idp/token_exchange/handler.py</div>
+</div>
 
-```python {all|2-7}
-revocation_sets = {
-  "jti":   "单 token",
-  "sub":   "用户级",
-  "agent": "Agent 级",
-  "trace": "调用链",
-  "plan":  "任务计划",
-  "chain": "委托链",
+<div class="card">
+  <div class="card-mono accent">GATE II</div>
+  <div class="card-title">Gateway × OPA 关</div>
+  <div class="card-body">JWKS 验签 + DPoP cnf.jkt 匹配 → 调 OPA decide · Rego <b>10 条全 AND</b> 决策。</div>
+  <div class="mt-3 dim text-xs" style="font-family: 'JetBrains Mono', monospace;">infra/opa/policies/a2a.rego</div>
+</div>
+
+<div class="card">
+  <div class="card-mono accent">GATE III</div>
+  <div class="card-title">Capability 匹配关</div>
+  <div class="card-body">Agent 启动期注册 capability 声明 · 调用前 <code>capability.find()</code> 二次校验，与 Gateway 决策正交。</div>
+  <div class="mt-3 dim text-xs" style="font-family: 'JetBrains Mono', monospace;">agents/common/capability.py</div>
+</div>
+
+</div>
+
+<div class="hr-soft mt-6"></div>
+
+<div class="grid grid-cols-2 gap-6 mt-4 text-sm">
+
+<div>
+  <div class="card-mono accent">RFC 9449 · DPOP</div>
+  <div class="card-body mt-1">
+    每次调用携带 ephemeral JWS proof · Gateway 比对 cnf.jkt 与 DPoP key thumbprint · 持有者证明 ↔ Bearer。
+  </div>
+</div>
+
+<div>
+  <div class="card-mono accent">REGO · 10 RULES</div>
+  <div class="card-body mt-1" style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; line-height: 1.6;">
+    token_valid · one_time_declared · audience_match · scope_covers · executor_valid · delegation_accepted · delegation_depth_ok · not_revoked · dpop_bound · context_ok
+  </div>
+</div>
+
+</div>
+
+<!--
+P8 45s
+- 三道关纵深防御是创新点
+- Rego 10 条用 mono 等宽列出，密集信息密度型
+-->
+
+---
+
+<!-- ============================================================ -->
+<!-- P9 · 模块③ Agents 编排 + 执行 -->
+
+<div class="page-num">09 / 13</div>
+<div class="page-anchor">§ 05 · MODULE III</div>
+
+<div class="eyebrow">05.3 · 模块③ · Agent 编排与执行</div>
+<h1>Agents — <span class="ok-c">orchestrator</span> · <span class="ok-c">executor</span> 严格分离</h1>
+<div class="hr-soft"></div>
+
+<div class="grid grid-cols-3 gap-4 mt-4">
+
+<div class="card" style="border-color: #10B981;">
+  <div class="card-mono" style="color: #10B981;">ORCHESTRATOR</div>
+  <div class="card-title">doc_assistant</div>
+  <div class="card-body mt-2">
+    LangGraph DAG · LLM JSON mode + 规则回退<br/>
+    <code>_topo_layers</code> 拓扑分层<br/>
+    <code>asyncio.gather</code> 同层并发<br/>
+    <code>validate_dag()</code> 失败 LLM 重试
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-mono">EXECUTOR</div>
+  <div class="card-title">data_agent</div>
+  <div class="card-body mt-2">
+    Intent 路由（regex 匹配）<br/>
+    飞书 OpenAPI：bitable / docx / contact / calendar / drive<br/>
+    Prompt Injection 清洗<br/>
+    无 LLM · 纯确定性
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-mono">EXECUTOR</div>
+  <div class="card-title">web_agent</div>
+  <div class="card-body mt-2">
+    <code>web.search</code> · Tavily 检索<br/>
+    <code>web.fetch</code> · HTML 提取 + LLM 摘要<br/>
+    URL allowlist 限制<br/>
+    速率限制 + 安全提取
+  </div>
+</div>
+
+</div>
+
+<div class="hr-soft mt-6"></div>
+
+<div class="grid grid-cols-2 gap-6 mt-4 text-sm">
+  <div>
+    <div class="card-mono accent">SOD · SEPARATION OF DUTIES</div>
+    <div class="card-body mt-1">
+      <code>@field_validator("role")</code> 启动期强制 orchestrator XOR executor，互斥防越权升级。
+    </div>
+  </div>
+  <div>
+    <div class="card-mono accent">SHARED SDK</div>
+    <div class="card-body mt-1">
+      屏蔽 RFC 8693 TE + RFC 9449 DPoP + W3C traceparent · <code>capability.find()</code> 调用前匹配。
+    </div>
+  </div>
+</div>
+
+<!--
+P9 45s
+- 三卡 + 共享栏 = orchestrator/executor 分离落地
+- 钉点：SoD 互斥 + SDK 屏蔽细节
+-->
+
+---
+
+<!-- ============================================================ -->
+<!-- P10 · 模块④ 审计 · 撤销 · 生态 -->
+
+<div class="page-num">10 / 13</div>
+<div class="page-anchor">§ 05 · MODULE IV</div>
+
+<div class="eyebrow">05.4 · 模块④ · 可观测与生态</div>
+<h1>Audit · 撤销 · 生态适配</h1>
+<div class="hr-soft"></div>
+
+<div class="grid grid-cols-2 gap-5 mt-4">
+
+<div class="card">
+  <div class="card-mono accent">6 维即时撤销 · revocation_sets</div>
+  <div class="card-body mt-2">
+
+```python
+KEY_MAP = {
+  "jti":   "单 token 维度",
+  "sub":   "用户维度",
+  "agent": "Agent 维度",
+  "trace": "调用链维度",
+  "plan":  "任务计划维度",
+  "chain": "委托链维度",
 }
-# Redis Pub/Sub → 全集群秒级生效
+# Redis Pub/Sub → 集群秒级生效
 ```
 
-</div>
-
-<div class="p-3 rounded border border-purple-200 bg-purple-50">
-  <div class="font-bold mb-2">职责严格分离</div>
-  <div class="text-xs space-y-1">
-    <div>• <code class="text-purple-700">role = orchestrator</code> 只能编排</div>
-    <div>• <code class="text-purple-700">role = executor</code> 只能执行</div>
-    <div>• <b>field_validator</b> 注册时强制</div>
-    <div>• 互斥防止越权升级</div>
   </div>
 </div>
 
-<div class="p-3 rounded border border-amber-200 bg-amber-50">
-  <div class="font-bold mb-2">完整审计链</div>
-  <div class="text-xs space-y-1">
-    <div>• W3C <b>traceparent</b> header 全链传播</div>
-    <div>• 字段：decision / reasons / jti / jkt / scope / sub</div>
-    <div>• SQLite WAL 持久化 + SSE 实时推送</div>
-    <div>• 多维查询：按用户 / Agent / 链路</div>
+<div class="card">
+  <div class="card-mono accent">AUDIT · BatchWriter + SSE</div>
+  <div class="card-body mt-2">
+    <code>asyncio.Queue</code> → SQLite WAL 批写<br/>
+    SSE 实时推送 · 多维查询<br/>
+    字段：decision · reasons · jti · jkt · scope · sub<br/>
+    W3C traceparent 全链 header 传播
   </div>
 </div>
 
-<div class="p-3 rounded border border-emerald-200 bg-emerald-50">
-  <div class="font-bold mb-2">与生态正交</div>
-  <div class="text-xs space-y-1">
-    <div>• <b>OPA</b> 复用（不重造策略引擎）</div>
-    <div>• Adapter：<b>LangChain / LangGraph / AutoGen</b></div>
-    <div>• 标准协议栈 — 任何框架可接入</div>
-    <div>• <b>77 SDK 测试</b>（100% pass）</div>
+<div class="card">
+  <div class="card-mono accent">SDK · 3 框架 ADAPTER</div>
+  <div class="card-body mt-2">
+    <code>agent_token_sdk/adapters/</code><br/>
+    • LangChain · <code>StructuredTool</code><br/>
+    • LangGraph · 节点级 invoke<br/>
+    • AutoGen · 工具注入<br/>
+    标准协议栈 — 任何框架可接入
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-mono accent">TEST · 77 / 77</div>
+  <div class="card-body mt-2">
+    <span class="stat-num" style="font-size: 2.4rem;">77</span>
+    <span class="mute"> SDK 单元 + 集成测试用例 · 100% pass</span><br/>
+    覆盖 TE / DPoP / capability / adapter / fault injection
   </div>
 </div>
 
 </div>
 
 <!--
-P7 40s：
-- 2x2 信息密度型布局，与 P5/P6 完全不同
-- 6 维撤销是创新点：业界一般 1-2 维
-- adapter 矩阵证明生态兼容性 — 直接关联"可复用"评分
+P10 40s
+- 信息密度型 2×2，每卡一条钉子
+- 77 测试数字给评委"工程严谨"印象
 -->
 
 ---
 
-<!-- P8 · AI 亮点 · § 二-1-4) -->
+<!-- ============================================================ -->
+<!-- P11 · AI 亮点 -->
 
-<div class="absolute top-4 right-6 text-xs text-gray-400">§ 二-1-4)</div>
+<div class="page-num">11 / 13</div>
+<div class="page-anchor">§ 06 · AI</div>
 
-# AI 亮点：功能侧 + 工程侧
+<div class="eyebrow">06 · AI 亮点</div>
+<h1>AI 在产品中 · 与在开发中</h1>
+<div class="hr-soft"></div>
 
 <div class="grid grid-cols-2 gap-6 mt-4">
 
 <div>
-  <div class="text-sm font-bold mb-3 text-emerald-700">🎯 功能侧（产品中的 AI）</div>
-  <div class="space-y-2 text-xs">
-    <div class="p-2 rounded bg-emerald-50 border border-emerald-200">
-      <b>① 结构化 DAG 编排</b><br/>
-      <span class="text-gray-600">Schema 校验不合规直接拒，杜绝幻觉跑偏</span>
-    </div>
-    <div class="p-2 rounded bg-emerald-50 border border-emerald-200">
-      <b>② JSON Mode + 后置 Schema 校验</b><br/>
-      <span class="text-gray-600">LLM 输出经 <code>validate_dag()</code> 双重防线，不合规 LLM 重试</span>
-    </div>
-    <div class="p-2 rounded bg-emerald-50 border border-emerald-200">
-      <b>③ AI 与安全完全隔离</b><br/>
-      <span class="text-gray-600">AI 路径无授权决策权 — 故障不污染安全</span>
-    </div>
-    <div class="p-2 rounded bg-emerald-50 border border-emerald-200">
-      <b>④ 用户描述目标即完成</b><br/>
-      <span class="text-gray-600">DAG 自动拓扑分层并发 — 多源任务一句话搞定</span>
-    </div>
+  <div class="card-mono ok-c">FEATURE SIDE · 产品中的 AI</div>
+  <div class="space-y-2 mt-3 text-sm">
+
+  <div class="card">
+    <b>① 结构化 DAG 编排</b>
+    <div class="card-body mt-1">LLM 产 JSON 计划 → <code>validate_dag()</code> 拒收非法结构 → LLM 重试 / 规则回退。</div>
+  </div>
+
+  <div class="card">
+    <b>② JSON Mode + 后置 Schema</b>
+    <div class="card-body mt-1"><code>response_format=json_object</code> + Schema validator 双层防线，抑制幻觉跑偏。</div>
+  </div>
+
+  <div class="card">
+    <b>③ AI 与安全完全隔离</b>
+    <div class="card-body mt-1">AI 路径无授权决策权 · 故障不污染 IdP/Gateway/OPA · agents 只做 capability 匹配。</div>
+  </div>
+
+  <div class="card">
+    <b>④ 用户描述目标即完成</b>
+    <div class="card-body mt-1"><code>_topo_layers</code> 自动拓扑分层 · 多源任务一句话搞定 — 跨飞书 + Web 一次完成。</div>
+  </div>
+
   </div>
 </div>
 
 <div>
-  <div class="text-sm font-bold mb-3 text-indigo-700">🛠 工程侧（开发中的 AI）</div>
-  <div class="space-y-2 text-xs">
-    <div class="p-2 rounded bg-indigo-50 border border-indigo-200">
-      <b>① 需求 → 方案</b><br/>
-      <span class="text-gray-600">AI 头脑风暴备选 → 人工拍板</span>
-    </div>
-    <div class="p-2 rounded bg-indigo-50 border border-indigo-200">
-      <b>② 架构 → 设计文档</b><br/>
-      <span class="text-gray-600">AI 写 spec 作为编码"合同"</span>
-    </div>
-    <div class="p-2 rounded bg-indigo-50 border border-indigo-200">
-      <b>③ 编码 Plan-Act</b><br/>
-      <span class="text-gray-600">先出 plan 拆任务，再 Act 执行</span>
-    </div>
-    <div class="p-2 rounded bg-indigo-50 border border-indigo-200">
-      <b>④ 测试与审计</b><br/>
-      <span class="text-gray-600">AI 定位根因 → 人工确认提交</span>
-    </div>
+  <div class="card-mono accent">ENGINEERING SIDE · 开发中的 AI</div>
+  <div class="space-y-2 mt-3 text-sm">
+
+  <div class="card">
+    <b>① 需求 → 方案</b>
+    <div class="card-body mt-1">AI 头脑风暴备选 → 人工拍板 — brainstorming skill 落地。</div>
+  </div>
+
+  <div class="card">
+    <b>② 架构 → 设计文档</b>
+    <div class="card-body mt-1">AI 写 spec 作为编码"合同" · 二次审核去歧义。</div>
+  </div>
+
+  <div class="card">
+    <b>③ 编码 Plan-Act</b>
+    <div class="card-body mt-1">先出 plan 拆任务，再 Act 执行 · subagent-driven-development 工作流。</div>
+  </div>
+
+  <div class="card">
+    <b>④ 测试与审计</b>
+    <div class="card-body mt-1">AI 定位根因 → 人工确认提交 · 代码核实贯穿全程。</div>
+  </div>
+
   </div>
 </div>
 
 </div>
 
-<div class="text-xs text-gray-500 text-center mt-4">
-Runtime: <b>Doubao Seed 2.0 Pro</b>（agents LLM 调用）· 开发协作: Claude（spec/plan/code review）
+<div class="hr-soft mt-4"></div>
+
+<div class="mt-2 text-xs mute" style="font-family: 'JetBrains Mono', monospace;">
+RUNTIME: Doubao Seed 2.0 Pro (agents LLM)  ·  DEV: Claude (spec / plan / code review)
 </div>
 
 <!--
-P8 60s — 最重 AI 创新页：
-- 功能侧第①②点回应"AI 关键作用 + 抑制幻觉"
-- 工程侧整套展示"AI 全流程参与开发" — 评委会问"你们怎么用 AI"
-- 模型选型钉脚：选型有理由（性价比 + 可控）
+P11 55s — 最重 AI 创新页
+- 左 = 产品里 AI 做什么 / 右 = 开发里 AI 怎么用
+- 对评委"AI 关键作用 + 工程化"问题一次答完
 -->
 
 ---
 
-<!-- P9 · 项目背景及落地价值 · § 二-1-5) -->
+<!-- ============================================================ -->
+<!-- P12 · 对比 + 创新 + 价值 -->
 
-<div class="absolute top-4 right-6 text-xs text-gray-400">§ 二-1-5)</div>
+<div class="page-num">12 / 13</div>
+<div class="page-anchor">§ 06 · COMPARE</div>
 
-# 项目背景及落地价值
+<div class="eyebrow">06 · 创新 · 对比 · 价值</div>
+<h1>差异化定位 — <span class="accent">五位一体</span></h1>
+<div class="hr-soft"></div>
 
-<div class="p-2 rounded bg-red-50 border border-red-200 text-sm text-center mb-4">
-⚠️ <b>痛点</b>：AI Agent 需以用户身份操作企业数据，OAuth 缺乏机器代机器细粒度授权
-</div>
+<div class="grid grid-cols-5 gap-4 mt-4">
 
-<div class="grid grid-cols-2 gap-3 text-sm">
+<div class="col-span-3">
 
-<div class="p-3 rounded-lg border-2 border-rose-200 bg-rose-50">
-  <div class="font-bold text-base mb-1">① 解决权限失控</div>
-  <div class="text-xs text-gray-700">
-    120s 一次性委托 + sub_jti 绑定<br/>
-    根本消除横向渗透与凭据外溢
-  </div>
-</div>
-
-<div class="p-3 rounded-lg border-2 border-blue-200 bg-blue-50">
-  <div class="font-bold text-base mb-1">② 可信协作链路</div>
-  <div class="text-xs text-gray-700">
-    每次委托一条完整记录<br/>
-    全链 traceparent 追责到 Agent
-  </div>
-</div>
-
-<div class="p-3 rounded-lg border-2 border-amber-200 bg-amber-50">
-  <div class="font-bold text-base mb-1">③ 满足合规审计</div>
-  <div class="text-xs text-gray-700">
-    不可篡改日志 + 多维查询<br/>
-    对接等保 / SOC2 / 内部审计
-  </div>
-</div>
-
-<div class="p-3 rounded-lg border-2 border-emerald-200 bg-emerald-50">
-  <div class="font-bold text-base mb-1">④ 业务效率</div>
-  <div class="text-xs text-gray-700">
-    用户描述目标即完成 · AI/安全不妥协<br/>
-    通用扩展：换框架不换授权
-  </div>
-</div>
-
-</div>
-
-<!--
-P9 45s：
-- 顶部痛点引子直接回应"解决什么问题"50% 权重
-- 4 卡片正好对应价值的"价值 / 可信 / 合规 / 效率"
-- 注意 ② 与 P7 审计链有重，话术上聚焦"业务价值"而不是"技术细节"
--->
-
----
-
-<!-- P10 · 相关产品调研 · § 三、 -->
-
-<div class="absolute top-4 right-6 text-xs text-gray-400">§ 三、</div>
-
-# 相关产品调研
-
-<div class="text-sm mt-4">
-
-| 方案 | 定位 | 与本项目差异 |
+| 方案 | 定位 | 差异 |
 |---|---|---|
-| **draft-aap-oauth-profile** | IETF 组合规范 | 草案 · 无开源实现 · 细节实现不同 |
-| **permit.io** | 决策判定（PDP） | 不解决 token 委托 · 权限模型不同 |
-| **Okta for AI Agents** | 闭源 SaaS | 强绑定 Okta 平台 · 国内合规风险 |
-| **Veto** | 单 Agent 策略 | 单 Agent 视角 · 不做 A2A 委托 |
-| **Portkey Agent Gateway** | LLM 流量代理 | 只记录不裁决 · 无授权能力 |
-| **OPA** | 通用策略引擎 | <b>直接复用，不重造</b> |
+| draft-aap-oauth-profile | IETF 组合规范 | <span class="dim">草案 · 无实现</span> |
+| permit.io | 决策判定 PDP | <span class="dim">不解决 token 委托</span> |
+| Okta for AI Agents | 闭源 SaaS | <span class="dim">强绑定 · 国内合规风险</span> |
+| Veto | 单 Agent 策略 | <span class="dim">无 A2A 委托</span> |
+| Portkey Agent Gateway | LLM 流量代理 | <span class="dim">只记录不裁决</span> |
+| <span class="accent">OPA</span> | 通用策略引擎 | <span class="accent">直接复用，不重造</span> |
 
 </div>
 
-<div class="mt-5 p-3 rounded bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 text-center text-sm">
-<b>差异化定位</b>：标准协议栈 + 零信任 + 最小权限 + 全链审计 + 多框架 adapter — <b>五位一体</b>
+<div class="col-span-2 space-y-3">
+
+<div>
+  <div class="card-mono accent">FIVE PILLARS</div>
+  <div class="space-y-1 mt-2 text-xs mute" style="font-family: 'JetBrains Mono', monospace;">
+    <div>① 协议标准 — IETF 全栈</div>
+    <div>② 零信任 — DPoP + cnf.jkt</div>
+    <div>③ 最小权限 — 三集合 ∩</div>
+    <div>④ 全链审计 — traceparent + 6 维撤销</div>
+    <div>⑤ 多框架 — LangChain / LangGraph / AutoGen</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-mono accent">LANDING VALUE</div>
+  <div class="card-body mt-1">
+    解决权限失控 · 构建可信链路 · 满足合规审计 · 提升业务效率
+  </div>
+</div>
+
+</div>
+
 </div>
 
 <!--
-P10 30s：
-- 表格快速扫，不逐行念
-- 重点强调最后一行：OPA 我们复用 — 体现"工程理性"
-- 底部"五位一体"是差异化收尾
+P12 40s
+- 表 + 五支柱 + 价值合一页，避免单独价值页冗余
 -->
 
 ---
 
-<!-- P11 · 谢幕 + 团队 + Q&A · § 二-2 / § 四、 -->
+<!-- ============================================================ -->
+<!-- P13 · 谢幕 -->
 
-<div class="absolute top-4 right-6 text-xs text-gray-400">§ 二-2 / 四、</div>
+<div class="page-num">13 / 13</div>
 
-<div class="text-center">
+<div class="h-full flex flex-col justify-center">
 
-# Thank You
+<div class="eyebrow">END · Q&A</div>
 
-<div class="text-base text-gray-500 mt-2 mb-8">期待你的提问</div>
+<h1 style="font-size: 4rem; border-left: none; padding-left: 0; line-height: 1.05; font-weight: 400;">
+Thank <span class="accent" style="font-style: italic;">You</span>
+</h1>
 
-<div class="grid grid-cols-3 gap-3 max-w-3xl mx-auto mb-8 text-xs">
+<div class="text-base mute mt-4" style="font-family: 'Fraunces', serif; font-style: italic;">期待你的提问</div>
 
-<div class="p-3 rounded-lg border border-blue-200 bg-blue-50 text-left">
-  <div class="font-bold text-sm">陈奕燔 · 组长</div>
-  <div class="text-gray-600 mt-1">IdP / OPA / 早期 AuditApi</div>
+<div class="hr-soft mt-10" style="max-width: 28rem;"></div>
+
+<div class="grid grid-cols-3 gap-6 mt-6 max-w-3xl text-sm">
+  <div>
+    <div class="dim text-xs" style="font-family: 'JetBrains Mono', monospace;">LEAD</div>
+    <div style="font-family: 'Fraunces', serif; font-size: 1.15rem;">陈奕燔</div>
+    <div class="mute text-xs">IdP · OPA · 早期 AuditApi</div>
+  </div>
+  <div>
+    <div class="dim text-xs" style="font-family: 'JetBrains Mono', monospace;">ENGINEER</div>
+    <div style="font-family: 'Fraunces', serif; font-size: 1.15rem;">周展鹏</div>
+    <div class="mute text-xs">Gateway · Web · Audit 测试</div>
+  </div>
+  <div>
+    <div class="dim text-xs" style="font-family: 'JetBrains Mono', monospace;">ENGINEER</div>
+    <div style="font-family: 'Fraunces', serif; font-size: 1.15rem;">金梓墨</div>
+    <div class="mute text-xs">Agents · SDK · 飞书接入</div>
+  </div>
 </div>
 
-<div class="p-3 rounded-lg border border-blue-200 bg-blue-50 text-left">
-  <div class="font-bold text-sm">周展鹏</div>
-  <div class="text-gray-600 mt-1">Gateway / Web 前端 / Audit 测试</div>
-</div>
-
-<div class="p-3 rounded-lg border border-blue-200 bg-blue-50 text-left">
-  <div class="font-bold text-sm">金梓墨</div>
-  <div class="text-gray-600 mt-1">Agents 架构 / SDK / 飞书接入</div>
-</div>
-
-</div>
-
-<div class="text-sm text-gray-500">
+<div class="mt-10 dim text-xs" style="font-family: 'JetBrains Mono', monospace;">
 github.com/your-org/A2A-Token-System
 </div>
 
-<div class="text-xs text-gray-400 mt-2">
-关键数字：120s 委托 · 6 维撤销 · 3 道关 · 6 RFC · 77 SDK 测试 100% pass
+<div class="mt-3 text-xs mute" style="font-family: 'JetBrains Mono', monospace;">
+120s 委托  ·  6 维撤销  ·  3 道关  ·  6 RFC  ·  77 SDK 测试 100% pass
 </div>
 
 </div>
 
 <!--
-P11 20s 谢幕：
-- 简短致谢 + 团队卡 + Github
+P13 20s — 谢幕
 - speaker notes:
-  • Demo 兜底视频：docs/slides/public/demo-fallback.mp4 — Q&A 评委要求时由主持人切播 30s
-  • 补充材料按需调出：测试矩阵 / 完整审计字段 / Rego 全文
-  • Q&A 预案：
-    - 为何选 RFC 8693 而不是 OAuth on-behalf-of？标准 + 显式 actor 声明
-    - 6 维撤销如何不影响性能？Redis bitset + 本地 5s 缓存
-    - field_validator 如何防绕过？Pydantic 模型注册时强制 + 启动期失败
+  • Demo 兜底：docs/slides/public/demo-fallback.mp4 主持人按需播 30s
+  • Q&A 预案：8693 vs OBO / 6 维撤销性能 / capability 防绕过 / Rego 10 条 / DPoP 实际开销
 -->
