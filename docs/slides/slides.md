@@ -207,7 +207,7 @@ P3 50s：
   <div class="text-xs text-gray-700 leading-relaxed">
     RFC 8693 委托链<br/>
     客户端 assertion + DPoP + 上游 token<br/>
-    <b>120s 一次性</b> · sub_jti 绑定
+    <b>120s 一次性</b> · <code>one_time</code> 强制
   </div>
 </div>
 
@@ -269,9 +269,9 @@ sequenceDiagram
   participant I as IdP
   participant G as Gateway
   participant T as Target Agent
-  C->>I: client_assertion (60s) + DPoP + 上游 token
+  C->>I: client_assertion (≤600s) + DPoP + 上游 token
   I->>I: 三验：assertion / DPoP / scope ∩
-  I-->>C: one-shot token (120s, sub_jti)
+  I-->>C: one-shot token (120s, one_time)
   C->>G: 调用 + DPoP proof
   G->>G: JWKS 验签 + cnf.jkt 匹配
   G->>T: 转发
@@ -337,8 +337,8 @@ P5 55s：
       <div class="text-xs text-gray-600">per-call Rego 10 条全 AND 复核</div>
     </div>
     <div class="p-3 rounded border-l-4 border-amber-400 bg-amber-50">
-      <div class="font-bold text-sm">③ Agent self-check 关</div>
-      <div class="text-xs text-gray-600">不信 Gateway · SDK 内置签名+scope 校验</div>
+      <div class="font-bold text-sm">③ Capability 匹配关</div>
+      <div class="text-xs text-gray-600">启动期注册声明 + 调用前 <code>capability.find()</code> 二次校验</div>
     </div>
   </div>
 </div>
@@ -392,9 +392,9 @@ revocation_sets = {
 <div class="p-3 rounded border border-amber-200 bg-amber-50">
   <div class="font-bold mb-2">完整审计链</div>
   <div class="text-xs space-y-1">
-    <div>• W3C <b>traceparent</b> + OpenTelemetry</div>
+    <div>• W3C <b>traceparent</b> header 全链传播</div>
     <div>• 字段：decision / reasons / jti / jkt / scope / sub</div>
-    <div>• SQLite 不可篡改 + SSE 实时</div>
+    <div>• SQLite WAL 持久化 + SSE 实时推送</div>
     <div>• 多维查询：按用户 / Agent / 链路</div>
   </div>
 </div>
@@ -405,7 +405,7 @@ revocation_sets = {
     <div>• <b>OPA</b> 复用（不重造策略引擎）</div>
     <div>• Adapter：<b>LangChain / LangGraph / AutoGen</b></div>
     <div>• 标准协议栈 — 任何框架可接入</div>
-    <div>• 70 / 70 SDK 测试用例</div>
+    <div>• <b>77 SDK 测试</b>（100% pass）</div>
   </div>
 </div>
 
@@ -436,8 +436,8 @@ P7 40s：
       <span class="text-gray-600">Schema 校验不合规直接拒，杜绝幻觉跑偏</span>
     </div>
     <div class="p-2 rounded bg-emerald-50 border border-emerald-200">
-      <b>② 结构化输出抑制幻觉</b><br/>
-      <span class="text-gray-600">Function Calling + Pydantic 强约束</span>
+      <b>② JSON Mode + 后置 Schema 校验</b><br/>
+      <span class="text-gray-600">LLM 输出经 <code>validate_dag()</code> 双重防线，不合规 LLM 重试</span>
     </div>
     <div class="p-2 rounded bg-emerald-50 border border-emerald-200">
       <b>③ AI 与安全完全隔离</b><br/>
@@ -475,7 +475,7 @@ P7 40s：
 </div>
 
 <div class="text-xs text-gray-500 text-center mt-4">
-模型选型：<b>Doubao Seed 2.0 Pro</b>（功能侧调用）· <b>Claude Sonnet 4.6</b>（工程侧协作）
+Runtime: <b>Doubao Seed 2.0 Pro</b>（agents LLM 调用）· 开发协作: Claude（spec/plan/code review）
 </div>
 
 <!--
@@ -608,7 +608,7 @@ github.com/your-org/A2A-Token-System
 </div>
 
 <div class="text-xs text-gray-400 mt-2">
-关键数字：120s 委托 · 6 维撤销 · 3 道关 · 6 RFC · 70/70 SDK 测试
+关键数字：120s 委托 · 6 维撤销 · 3 道关 · 6 RFC · 77 SDK 测试 100% pass
 </div>
 
 </div>
