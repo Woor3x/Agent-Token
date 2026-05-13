@@ -298,3 +298,58 @@ P5 55s：
 -->
 
 ---
+
+<!-- P6 · 亮点 ② 最小权限 + 三道关 · § 二-1-3) -->
+
+<div class="absolute top-4 right-6 text-xs text-gray-400">§ 二-1-3) ②</div>
+
+# 亮点 ②：最小权限 + 三道关
+
+<div class="grid grid-cols-2 gap-6 mt-4">
+
+<div>
+  <div class="text-sm font-bold mb-2 text-gray-700">最小权限计算</div>
+  <div class="p-4 rounded-lg bg-gradient-to-br from-purple-50 to-blue-50 border-2 border-purple-200">
+    <div class="font-mono text-sm text-center my-2 leading-relaxed">
+      <span class="text-purple-700">effective_scope</span> =<br/>
+      <span class="text-rose-600">callee_caps</span> ∩<br/>
+      <span class="text-emerald-600">user_perms</span> ∩<br/>
+      <span class="text-amber-600">requested_scope</span>
+    </div>
+  </div>
+  <div class="text-xs mt-3 space-y-1">
+    <div>• <b>callee_caps</b>：被调端能力上限（注册时声明）</div>
+    <div>• <b>user_perms</b>：用户授权范围（OIDC consent）</div>
+    <div>• <b>requested_scope</b>：本次任务真正需要</div>
+  </div>
+  <div class="text-xs mt-3 p-2 bg-amber-50 rounded">三者全空 ⇒ 拒签 · 永不"宽给"</div>
+</div>
+
+<div>
+  <div class="text-sm font-bold mb-2 text-gray-700">三道关防御</div>
+  <div class="space-y-2">
+    <div class="p-3 rounded border-l-4 border-rose-400 bg-rose-50">
+      <div class="font-bold text-sm">① IdP 签发关</div>
+      <div class="text-xs text-gray-600">事前 ABAC：subject / agent / action / context</div>
+    </div>
+    <div class="p-3 rounded border-l-4 border-orange-400 bg-orange-50">
+      <div class="font-bold text-sm">② Gateway × OPA 关</div>
+      <div class="text-xs text-gray-600">per-call Rego 10 条全 AND 复核</div>
+    </div>
+    <div class="p-3 rounded border-l-4 border-amber-400 bg-amber-50">
+      <div class="font-bold text-sm">③ Agent self-check 关</div>
+      <div class="text-xs text-gray-600">不信 Gateway · SDK 内置签名+scope 校验</div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!--
+P6 55s：
+- 公式是"创新性"的钉子 — 三集合交集
+- 三道关展示"纵深防御"，回应技术深度评分
+- 注意：与 P5 是不同视觉布局（公式 vs 横向卡）避免审美疲劳
+-->
+
+---
