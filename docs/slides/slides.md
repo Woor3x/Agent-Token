@@ -486,3 +486,58 @@ P8 60s — 最重 AI 创新页：
 -->
 
 ---
+
+<!-- P9 · 项目背景及落地价值 · § 二-1-5) -->
+
+<div class="absolute top-4 right-6 text-xs text-gray-400">§ 二-1-5)</div>
+
+# 项目背景及落地价值
+
+<div class="p-2 rounded bg-red-50 border border-red-200 text-sm text-center mb-4">
+⚠️ <b>痛点</b>：AI Agent 需以用户身份操作企业数据，OAuth 缺乏机器代机器细粒度授权
+</div>
+
+<div class="grid grid-cols-2 gap-3 text-sm">
+
+<div class="p-3 rounded-lg border-2 border-rose-200 bg-rose-50">
+  <div class="font-bold text-base mb-1">① 解决权限失控</div>
+  <div class="text-xs text-gray-700">
+    120s 一次性委托 + sub_jti 绑定<br/>
+    根本消除横向渗透与凭据外溢
+  </div>
+</div>
+
+<div class="p-3 rounded-lg border-2 border-blue-200 bg-blue-50">
+  <div class="font-bold text-base mb-1">② 可信协作链路</div>
+  <div class="text-xs text-gray-700">
+    每次委托一条完整记录<br/>
+    全链 traceparent 追责到 Agent
+  </div>
+</div>
+
+<div class="p-3 rounded-lg border-2 border-amber-200 bg-amber-50">
+  <div class="font-bold text-base mb-1">③ 满足合规审计</div>
+  <div class="text-xs text-gray-700">
+    不可篡改日志 + 多维查询<br/>
+    对接等保 / SOC2 / 内部审计
+  </div>
+</div>
+
+<div class="p-3 rounded-lg border-2 border-emerald-200 bg-emerald-50">
+  <div class="font-bold text-base mb-1">④ 业务效率</div>
+  <div class="text-xs text-gray-700">
+    用户描述目标即完成 · AI/安全不妥协<br/>
+    通用扩展：换框架不换授权
+  </div>
+</div>
+
+</div>
+
+<!--
+P9 45s：
+- 顶部痛点引子直接回应"解决什么问题"50% 权重
+- 4 卡片正好对应价值的"价值 / 可信 / 合规 / 效率"
+- 注意 ② 与 P7 审计链有重，话术上聚焦"业务价值"而不是"技术细节"
+-->
+
+---
