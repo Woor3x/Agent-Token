@@ -1,0 +1,859 @@
+---
+theme: seriph
+title: A2A-Token-System · 决赛答辩
+info: |
+  ## A2A-Token-System
+  面向多 Agent 协作的零信任授权平台 — 飞书 AI 校园挑战赛 决赛答辩
+class: text-center
+colorSchema: light
+highlighter: shiki
+lineNumbers: false
+transition: slide-left
+mdc: true
+fonts:
+  sans: 'Inter, "PingFang SC", "Microsoft YaHei"'
+  mono: 'JetBrains Mono'
+drawings:
+  persist: false
+download: true
+background: https://cover.sli.dev
+---
+
+# A2A-Token-System
+
+<div class="text-xl opacity-80 mt-4">面向多 Agent 协作的零信任授权平台</div>
+
+<div class="mt-16 text-sm opacity-70">
+  飞书 AI 校园挑战赛 · 决赛答辩 · 2026
+</div>
+
+<div class="mt-2 text-sm opacity-60">
+  陈奕燔 · 周展鹏 · 金梓墨 &nbsp;|&nbsp; 杭州电子科技大学
+</div>
+
+<div class="absolute bottom-10 right-10 text-xs opacity-50">
+  github.com/Woor3x/Agent-Token
+</div>
+
+<!--
+开场 30 秒：项目名 + 三人 + 一句话定位。
+-->
+
+---
+layout: center
+class: text-center
+---
+
+# 一个绕不开的问题
+
+<div class="text-2xl mt-12 opacity-90">
+企业 AI 落地：<strong>Agent 拿用户 token，然后呢？</strong>
+</div>
+
+<div class="mt-12 grid grid-cols-3 gap-6 text-left">
+  <div class="p-4 rounded-lg bg-red-50 border border-red-200">
+    <div class="text-red-600 font-bold">权限无边界</div>
+    <div class="text-sm mt-2 opacity-80">长期 token 一旦泄露 → 横向渗透全部系统</div>
+  </div>
+  <div class="p-4 rounded-lg bg-amber-50 border border-amber-200">
+    <div class="text-amber-700 font-bold">信任链断裂</div>
+    <div class="text-sm mt-2 opacity-80">无法追溯"谁授权谁、什么范围、做了什么"</div>
+  </div>
+  <div class="p-4 rounded-lg bg-orange-50 border border-orange-200">
+    <div class="text-orange-700 font-bold">审计缺失</div>
+    <div class="text-sm mt-2 opacity-80">事后日志拼凑，无法满足合规追溯</div>
+  </div>
+</div>
+
+<div class="mt-12 text-sm opacity-60">
+现有 OAuth 没为 <strong>机器代机器 / 机器代人</strong> 场景准备细粒度授权与审计能力
+</div>
+
+---
+layout: center
+---
+
+# 我们的答案
+
+<div class="text-3xl mt-8 font-light">
+零信任 · 最小权限 · 全链可审
+</div>
+
+<div class="mt-16 grid grid-cols-2 gap-8 text-left text-sm">
+
+<div>
+
+**身份**
+
+- Agent 间每次调用都需证明身份
+- 不存在长期信任密钥
+- 委托令牌 120 秒过期 · 一次性
+
+</div>
+<div>
+
+**权限**
+
+- `effective_scope = callee_caps ∩ user_perms ∩ requested_scope`
+- 三道关防御：IdP / Gateway+OPA / Agent self-check
+- 6 维度实时撤销，Redis 广播
+
+</div>
+<div>
+
+**审计**
+
+- W3C traceparent，OTel 兼容
+- 每跳落 SQLite + 转发 Audit API
+- decision · reasons · jti · jkt 全留痕
+
+</div>
+<div>
+
+**生态**
+
+- 标准协议栈（OIDC / RFC 8693 / DPoP）
+- 不重造 OPA / OAuth 轮子
+- LangGraph / LangChain / AutoGen 三套 adapter
+
+</div>
+
+</div>
+
+---
+layout: section
+---
+
+# 一、系统架构
+
+---
+layout: default
+---
+
+# 系统全景
+
+```mermaid {scale: 0.65}
+flowchart LR
+    U[👤 User<br/>Web UI] -->|OIDC PKCE| IDP[(IdP<br/>身份/令牌/吊销)]
+    U -->|/chat| DA[doc_assistant<br/>orchestrator]
+    DA -->|token-exchange| IDP
+    DA -->|invoke + DPoP| GW{{Gateway<br/>唯一入口}}
+    GW -->|裁决| OPA[(OPA<br/>Rego 策略)]
+    GW -->|审计| AU[(Audit API<br/>SQLite + SSE)]
+    GW --> DT[data_agent]
+    GW --> WB[web_agent]
+    DT --> FS[飞书 OpenAPI<br/>bitable/docx/drive/calendar]
+    WB --> TV[Tavily Search]
+    WB --> NET[HTTPS Fetch<br/>SSRF 防护]
+    IDP -. JWKS 公钥 .-> GW
+
+    classDef sec fill:#fff4e6,stroke:#e67700;
+    classDef agent fill:#e6f7ff,stroke:#1971c2;
+    classDef ext fill:#f8f9fa,stroke:#868e96;
+    class IDP,GW,OPA,AU sec
+    class DA,DT,WB agent
+    class FS,TV,NET,U ext
+```
+
+<div class="mt-2 text-xs opacity-60 text-center">
+飞书数据服务为业务场景 · IdP 事前签发 · Gateway 执行时裁决 · 职责严格分离
+</div>
+
+---
+layout: two-cols-header
+---
+
+# 一次 `/chat` 三步走
+
+::left::
+
+### 1. 登录 — 确认你是谁
+用户 Web UI 完成 OIDC PKCE，IdP 颁发访问令牌，令牌记录身份与权限范围。
+
+### 2. Token Exchange — 按需申请权限
+`doc_assistant` 向 IdP 申请委托令牌，IdP 签发前三验：
+
+- doc_assistant 身份合法
+- 用户对目标数据有权限
+- 申请范围在授权之内
+
+三者**取交集**签发：**120 秒、一次性**。
+
+::right::
+
+### 3. 执行鉴权 — 每步都过关卡
+`doc_assistant` 持委托令牌调 `data_agent`，每次走 Gateway，查 OPA 实时判决：
+
+- 合法 → 放行，飞书 API 调用返数据
+- 异常 → `403 deny_reasons`
+
+数据齐备 → `doc_assistant` 汇总生成文档 → 写飞书 → 返回链接。
+
+<div class="mt-6 p-3 rounded bg-blue-50 text-sm">
+<strong>设计点</strong>：AI 只参与"理解语义 / 生成内容"。权限校验、令牌签发、审计写入全部由确定性代码实现 — AI 链路与安全链路严格隔离。
+</div>
+
+---
+layout: section
+---
+
+# 二、零信任机制
+
+---
+
+# 协议栈深度
+
+<div class="grid grid-cols-3 gap-4 mt-8">
+
+<div class="p-4 rounded-lg border border-blue-200 bg-blue-50">
+<div class="text-xs opacity-60">RFC 7519</div>
+<div class="text-lg font-bold">JWT</div>
+<div class="text-xs mt-2">所有令牌的承载格式</div>
+</div>
+
+<div class="p-4 rounded-lg border border-blue-200 bg-blue-50">
+<div class="text-xs opacity-60">RFC 7523</div>
+<div class="text-lg font-bold">Client Assertion</div>
+<div class="text-xs mt-2">Agent 身份证明，60s 有效</div>
+</div>
+
+<div class="p-4 rounded-lg border border-blue-200 bg-blue-50">
+<div class="text-xs opacity-60">RFC 7636</div>
+<div class="text-lg font-bold">PKCE</div>
+<div class="text-xs mt-2">前端登录防授权码截获</div>
+</div>
+
+<div class="p-4 rounded-lg border border-blue-200 bg-blue-50">
+<div class="text-xs opacity-60">RFC 7638</div>
+<div class="text-lg font-bold">JWK Thumbprint</div>
+<div class="text-xs mt-2">DPoP 绑定密钥指纹</div>
+</div>
+
+<div class="p-4 rounded-lg border border-green-300 bg-green-50">
+<div class="text-xs opacity-60">RFC 8693 · 核心</div>
+<div class="text-lg font-bold">Token Exchange</div>
+<div class="text-xs mt-2">委托令牌签发，机器代人</div>
+</div>
+
+<div class="p-4 rounded-lg border border-green-300 bg-green-50">
+<div class="text-xs opacity-60">RFC 9449 · 核心</div>
+<div class="text-lg font-bold">DPoP</div>
+<div class="text-xs mt-2">token holder 绑定，防盗用</div>
+</div>
+
+</div>
+
+<div class="mt-10 text-center text-sm opacity-70">
+六份 RFC 相互约束 · 全链路标准协议 · 与开源生态正交
+</div>
+
+---
+
+# 零信任 A2A 机制
+
+<div class="text-center text-lg mt-4 opacity-80">
+Agent 调 Agent，每次都要证明身份 — 不存在长期信任密钥
+</div>
+
+```mermaid {scale: 0.6}
+sequenceDiagram
+    autonumber
+    participant C as Caller Agent
+    participant IDP as IdP
+    participant GW as Gateway
+    participant T as Target Agent
+
+    Note over C: client_assertion (JWT)<br/>iss/sub/aud/exp/jti · 60s
+    Note over C: DPoP proof (JWT)<br/>htm/htu/iat/jti/jwk
+    C->>IDP: POST /token/exchange
+    IDP->>IDP: ① verify assertion sig (JWKS)
+    IDP->>IDP: ② verify DPoP + jkt
+    IDP->>IDP: ③ scope 三方求交
+    IDP-->>C: access_token (cnf.jkt = thumbprint)<br/>120s · one-shot
+
+    Note over C: 新 DPoP proof + ath=hash(token)
+    C->>GW: /invoke + DPoP
+    GW->>GW: JWT sig + jkt 匹配 + nonce 反重放
+    GW->>T: 转发 (X-Target-Agent)
+    T->>T: self-check (zero-trust)
+    T-->>C: data
+```
+
+<div class="mt-2 text-xs opacity-60 text-center">
+client_assertion 证身份 · one-shot token 防重放（sub_jti 绑定）· DPoP proof 防盗用
+</div>
+
+---
+layout: two-cols
+---
+
+# 最小权限保证
+
+<div class="mt-4 p-4 rounded bg-gray-50 font-mono text-sm">
+effective_scope = <br/>
+&nbsp;&nbsp;&nbsp;&nbsp;callee_caps<br/>
+&nbsp;&nbsp;&nbsp;∩ user_perms<br/>
+&nbsp;&nbsp;&nbsp;∩ requested_scope
+</div>
+
+<div class="mt-4 text-sm space-y-2">
+
+- **callee_caps**：被调用 Agent 的能力声明（capability YAML）
+- **user_perms**：人类用户在 IdP 持有的权限
+- **requested_scope**：本次任务请求的范围
+
+</div>
+
+<div class="mt-4 p-3 rounded bg-emerald-50 text-sm">
+三者取交，最终令牌只持<strong>本次任务必需</strong>的最小可用权限
+</div>
+
+::right::
+
+# 6 维度撤销
+
+```python
+revocation_sets = {
+    "jti",     # 单个令牌
+    "sub",     # 用户所有令牌
+    "agent",   # Agent 所有令牌
+    "trace",   # 一条调用链
+    "plan",    # 一次 Plan 执行
+    "chain",   # 委托链衍生
+}
+```
+
+<div class="mt-4 text-sm">
+撤销信号 → Redis Pub/Sub → 实时广播 Gateway，<strong>不依赖令牌过期</strong>。
+</div>
+
+<div class="mt-3 text-xs opacity-60">
+粒度从单 token 到整条链路，事件响应可逐级收紧。
+</div>
+
+---
+layout: center
+---
+
+# 三道关防御
+
+<div class="mt-8 grid grid-cols-3 gap-6 text-left">
+
+<div class="p-5 rounded-xl border-2 border-blue-300 bg-blue-50">
+<div class="text-3xl">🛡️</div>
+<div class="font-bold mt-3">① IdP 签发关</div>
+<div class="text-sm mt-2">事前 ABAC：身份 / 范围 / 时间窗口三验，scope 三方求交</div>
+</div>
+
+<div class="p-5 rounded-xl border-2 border-emerald-300 bg-emerald-50">
+<div class="text-3xl">⚖️</div>
+<div class="font-bold mt-3">② Gateway · OPA 关</div>
+<div class="text-sm mt-2">Per-call Rego 复核 10 条全 AND；任意失败入 reasons 集合</div>
+</div>
+
+<div class="p-5 rounded-xl border-2 border-purple-300 bg-purple-50">
+<div class="text-3xl">🔒</div>
+<div class="font-bold mt-3">③ Agent self-check</div>
+<div class="text-sm mt-2">下游 Agent 再验一次 JWT + capability —— <strong>不信 Gateway</strong></div>
+</div>
+
+</div>
+
+<div class="mt-10 text-center text-sm opacity-70">
+任一环失守，下一环仍然把关 · 真正的零信任
+</div>
+
+---
+
+# 审计 · 职责 · 生态
+
+<div class="grid grid-cols-3 gap-4 mt-6">
+
+<div>
+
+### 完整审计链
+
+- W3C `traceparent`，OTel 兼容
+- 每跳落 SQLite + 转发 Audit API
+- `decision` · `deny_reasons` · `jti` · `dpop_jkt` 全留痕
+
+</div>
+
+<div>
+
+### Agent 职责分离
+
+- `role` ∈ { **orchestrator**, **executor** }
+- 写在注册 YAML，KMS 加载时 `field_validator` 强制
+- Orchestrator 不能同时是 Executor
+
+</div>
+
+<div>
+
+### 与开源生态正交
+
+- OPA 不重造轮子
+- LangGraph / LangChain / AutoGen 三套 adapter
+- 标准协议栈 → 新 Agent 注册即接入
+
+</div>
+
+</div>
+
+<div class="mt-10 p-4 rounded-lg bg-slate-50 text-sm">
+<strong>核心数据：</strong>所有令牌签发与拒绝事件均写入不可篡改审计日志，记录完整调用链 ID、操作主体、权限范围与策略版本，支持按 user / agent / task 维度查询 → 满足企业合规与监管追溯。
+</div>
+
+---
+layout: section
+---
+
+# 三、业务执行层 (Agents)
+
+---
+
+# Agents 业务全景
+
+<div class="grid grid-cols-2 gap-6 mt-4 text-sm">
+
+<div class="p-4 rounded-lg bg-blue-50 border border-blue-200">
+<div class="font-bold text-blue-700">🦴 Common 骨架</div>
+<div class="mt-2 text-xs">
+所有 Agent 共享的零信任基座 ·
+<code>AgentServer</code> 统一 FastAPI 挂 <code>/invoke</code> + <code>/healthz</code> ·
+JWT 验签（JWKS + iss/aud/exp/cnf.jkt 绑定）·
+capability/scope glob 自检 ·
+trace 上下文注入 ·
+Capability YAML 加载器 ·
+AgentConfig env 解析 ·
+结构化日志 ·
+ULID 事件 ID
+</div>
+</div>
+
+<div class="p-4 rounded-lg bg-purple-50 border border-purple-200">
+<div class="font-bold text-purple-700">🤖 LLM Provider</div>
+<div class="mt-2 text-xs">
+适配多供应商（OpenAI / 火山 Volc / Mock）· factory.py 按 env 切换 · mock 模式零网络出测试
+</div>
+</div>
+
+<div class="p-4 rounded-lg bg-emerald-50 border border-emerald-200">
+<div class="font-bold text-emerald-700">🧭 doc_assistant · Orchestrator</div>
+<div class="mt-2 text-xs">
+LangGraph DAG：<code>planner</code> → <code>plan_validate</code> → <code>dispatcher</code> → <code>synthesizer</code> → <code>doc_writer</code>
+· 接 <code>/chat</code> · 生成 DAG · 调度 subagent
+</div>
+</div>
+
+<div class="p-4 rounded-lg bg-amber-50 border border-amber-200">
+<div class="font-bold text-amber-700">📊 data_agent</div>
+<div class="mt-2 text-xs">
+封装飞书 OpenAPI：bitable / docx / drive / calendar / contact · OAuth token 刷新 · 统一 _http 错误码
+</div>
+</div>
+
+<div class="p-4 rounded-lg bg-rose-50 border border-rose-200 col-span-2">
+<div class="font-bold text-rose-700">🌐 web_agent</div>
+<div class="mt-2 text-xs">
+<code>web.search</code> Tavily 智能搜索 + 规则清洗 ·
+<code>web.fetch</code> SSRF 检测后抓取 ·
+LLM 二次清洗总结 ·
+<strong>四层安全防护</strong>（下一页详解）
+</div>
+</div>
+
+</div>
+
+---
+
+# Orchestrator 调用链路
+
+```mermaid {scale: 0.65}
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant DA as doc_assistant
+    participant SDK as SDK Client
+    participant IDP as IdP
+    participant GW as Gateway
+    participant DT as data_agent
+    participant WB as web_agent
+
+    U->>DA: POST /chat {query}
+    DA->>DA: planner → DAG
+    DA->>DA: plan_validate (capability/scope)
+    Note over DA: dispatcher 拓扑分层
+    par data 分支
+        DA->>SDK: invoke(data_agent)
+        SDK->>IDP: token-exchange (assertion + DPoP)
+        IDP-->>SDK: 委托 token (cnf.jkt)
+        SDK->>GW: /invoke + DPoP proof
+        GW->>DT: 转发
+        DT-->>SDK: {rows}
+    and web 分支
+        DA->>SDK: invoke(web_agent)
+        SDK->>GW: /invoke (持新 token)
+        GW->>WB: 转发
+        WB-->>SDK: {summary}
+    end
+    DA->>DA: synthesizer (合并 + 二次过滤)
+    DA->>DA: doc_writer → markdown/blocks
+    DA-->>U: stream {answer, sources, doc_url}
+```
+
+<div class="mt-2 text-xs opacity-60 text-center">
+同层无依赖节点并行执行 · 缩短整体任务耗时
+</div>
+
+---
+
+# web_agent 四层安全防护
+
+<div class="grid grid-cols-4 gap-3 mt-6">
+
+<div class="p-4 rounded-lg bg-red-50 border-l-4 border-red-400">
+<div class="font-bold text-red-700">① 网络层</div>
+<div class="text-xs mt-3 space-y-1">
+<div>SSRF + CIDR 黑名单</div>
+<div>HTTPS-only · 禁 redirect</div>
+<div>size / timeout 上限</div>
+</div>
+</div>
+
+<div class="p-4 rounded-lg bg-orange-50 border-l-4 border-orange-400">
+<div class="font-bold text-orange-700">② 解码层</div>
+<div class="text-xs mt-3 space-y-1">
+<div>四级 charset 探测</div>
+<div>三启发式 mojibake 检测</div>
+<div>乱码注入在字节阶段剥掉</div>
+</div>
+</div>
+
+<div class="p-4 rounded-lg bg-amber-50 border-l-4 border-amber-400">
+<div class="font-bold text-amber-700">③ 清洗层</div>
+<div class="text-xs mt-3 space-y-1">
+<div>同管线 <code>_extract_text</code></div>
+<div>用于 search snippet + HTML</div>
+<div>剥脚本 / 事件 / 标签 / JS</div>
+</div>
+</div>
+
+<div class="p-4 rounded-lg bg-emerald-50 border-l-4 border-emerald-400">
+<div class="font-bold text-emerald-700">④ LLM 层</div>
+<div class="text-xs mt-3 space-y-1">
+<div>system prompt 禁执行嵌入指令</div>
+<div>raw text 不出库</div>
+<div>synthesizer 二次过滤</div>
+</div>
+</div>
+
+</div>
+
+<div class="mt-8 p-3 rounded bg-slate-50 text-xs text-center">
+Prompt Injection 防御 = <strong>纵深</strong>：网络 → 解码 → 清洗 → LLM，任一层独立失效都不致破防
+</div>
+
+---
+layout: section
+---
+
+# 四、SDK · 客户端基座
+
+---
+
+# SDK 核心功能
+
+<div class="text-sm opacity-70 mt-2">Agents 架构接入 A2A-Token-system 的统一客户端 — 屏蔽 DPoP / Token Exchange 复杂度</div>
+
+<div class="grid grid-cols-2 gap-4 mt-6">
+
+<div class="p-4 rounded-lg bg-blue-50 border border-blue-200">
+<div class="font-bold">📞 调用接口 <code>client.invoke()</code></div>
+<div class="text-xs mt-2">串联 IdP + Gateway 验证 → 调用 Agent 执行任务，单方法封装全链路</div>
+</div>
+
+<div class="p-4 rounded-lg bg-green-50 border border-green-200">
+<div class="font-bold">📜 Assertion 自签</div>
+<div class="text-xs mt-2">生成代理身份证明：<code>iss / sub / aud / exp / jti</code>，RSA-2048 签发</div>
+</div>
+
+<div class="p-4 rounded-lg bg-purple-50 border border-purple-200">
+<div class="font-bold">🔐 DPoP Proof 签名</div>
+<div class="text-xs mt-2">绑定访问令牌：<code>htm / htu / iat / jti / ath</code>，公钥拇指印写入 <code>cnf.jkt</code></div>
+</div>
+
+<div class="p-4 rounded-lg bg-amber-50 border border-amber-200">
+<div class="font-bold">🔌 Adapter 多框架接入</div>
+<div class="text-xs mt-2">
+<code>LangGraph</code> 节点 · <code>LangChain</code> StructuredTool · <code>AutoGen</code> ConversableAgent —— 三套 adapter
+</div>
+</div>
+
+</div>
+
+<div class="mt-6">
+
+```python {3-7}
+# 一行 invoke，背后全部完成
+async def invoke(self, *, target, intent, on_behalf_of,
+                 purpose="", plan_id=None, task_id=None,
+                 trace_id=None, idempotency_key=None):
+    assertion = self._sign_assertion(target)        # RFC 7523
+    dpop = self._sign_dpop(htu, htm)                # RFC 9449
+    token = await self._idp_exchange(assertion, dpop)  # RFC 8693
+    return await self._gateway_invoke(token, intent)
+```
+
+</div>
+
+---
+layout: section
+---
+
+# 五、AI 工程化亮点
+
+---
+
+# AI 在功能中的设计
+
+<div class="grid grid-cols-2 gap-6 mt-4">
+
+<div class="p-4 rounded-lg bg-indigo-50 border border-indigo-200">
+<div class="font-bold text-indigo-700">① 结构化 DAG 任务编排</div>
+<div class="text-xs mt-2 leading-relaxed">
+自然语言 → Prompt 引导 LLM 输出结构化 DAG（节点 / 依赖 / 顺序）。<strong>严格 Schema 校验，不合规则直接拒</strong>，不进执行链路。"意图理解"与"任务调度"解耦，模糊输入不直接驱动行为。同层无依赖节点并行。
+</div>
+</div>
+
+<div class="p-4 rounded-lg bg-purple-50 border border-purple-200">
+<div class="font-bold text-purple-700">② 结构化输出抑制幻觉</div>
+<div class="text-xs mt-2 leading-relaxed">
+执行环节选 <strong>Function Calling / Structured Output</strong> 模型，Prompt 约束强制合法 JSON。非结构化 / 字段缺失在<strong>入口拦截</strong>，不流入下游，根本避免幻觉引发系统崩溃。
+</div>
+</div>
+
+<div class="p-4 rounded-lg bg-emerald-50 border border-emerald-200">
+<div class="font-bold text-emerald-700">③ 安全链路与 AI 完全隔离</div>
+<div class="text-xs mt-2 leading-relaxed">
+AI 只负责"<strong>理解语义</strong>"+ "<strong>生成内容</strong>"。权限校验（OPA Rego）、令牌签发、审计记录全部由<strong>确定性代码</strong>实现。AI 无论输出什么，都无法绕过权限直接操作数据。
+</div>
+</div>
+
+<div class="p-4 rounded-lg bg-amber-50 border border-amber-200">
+<div class="font-bold text-amber-700">④ 用户价值</div>
+<div class="text-xs mt-2 leading-relaxed">
+用户无需了解底层数据结构，描述任务目标 → 系统自动跨数据源整合 + 文档生成。效率显著提升，同时从系统层面消除 Agent 直接操作数据导致的误删 / 越权风险。
+</div>
+</div>
+
+</div>
+
+---
+
+# AI 在工程开发中的应用
+
+<div class="grid grid-cols-2 gap-4 mt-6 text-xs">
+
+<div class="p-3 rounded-lg bg-blue-50 border-l-4 border-blue-400">
+<div class="font-bold">① 需求 → 方案</div>
+<div class="mt-1">AI 头脑风暴发散技术路线，输出多方案对比；协作完成系统设计文档初稿（模块 / 接口 / 数据流）。<em>想清楚再动手</em>。</div>
+</div>
+
+<div class="p-3 rounded-lg bg-green-50 border-l-4 border-green-400">
+<div class="font-bold">② 架构 → 模块</div>
+<div class="mt-1">各成员对负责模块逐一输出详细设计文档（功能 / API / 错误约定），作为编码"<strong>合同</strong>"，减少联调返工。</div>
+</div>
+
+<div class="p-3 rounded-lg bg-purple-50 border-l-4 border-purple-400">
+<div class="font-bold">③ 编码 · Plan-Act 模式</div>
+<div class="mt-1">向 Claude Code / TRAE 发任务前<strong>先输出执行计划</strong>，人工确认后再落地。减少误删、覆盖、幽灵代码，保留关键节点的人工控制。</div>
+</div>
+
+<div class="p-3 rounded-lg bg-rose-50 border-l-4 border-rose-400">
+<div class="font-bold">④ 测试 · 审计</div>
+<div class="mt-1">AI 做安全审计（边界 / 权限 / 异常路径），AI 定位报错根因 → 人工确认 → 落地。</div>
+</div>
+
+</div>
+
+<div class="mt-6 p-3 rounded-lg bg-slate-50 text-xs text-center">
+模型选型：<strong>Doubao Seed 2.0 Pro</strong> · <strong>Claude Sonnet 4.6</strong> — 复杂系统的构建与审计需求
+</div>
+
+---
+layout: section
+---
+
+# 六、落地价值 & 调研
+
+---
+
+# 项目背景与落地价值
+
+<div class="grid grid-cols-2 gap-5 mt-6">
+
+<div class="p-4 rounded-lg border border-emerald-300 bg-emerald-50">
+<div class="font-bold text-emerald-700">① 解决权限失控</div>
+<div class="text-xs mt-2">
+传统 Agent 持长期 token，权限无边界且难回收。本系统将权限精确收窄至<strong>单次任务所需范围</strong>，委托令牌 120 秒后自动失效，即便泄露也无法二次利用 → <strong>根本消除横向渗透</strong>。
+</div>
+</div>
+
+<div class="p-4 rounded-lg border border-blue-300 bg-blue-50">
+<div class="font-bold text-blue-700">② 构建可信协作链路</div>
+<div class="text-xs mt-2">
+每次 Agent 间委托建立完整信任记录：谁发起、什么范围、基于哪个用户的权限。<strong>调用链全程可追溯</strong>，任意节点异常可精确定位 → 不依赖事后日志拼凑。
+</div>
+</div>
+
+<div class="p-4 rounded-lg border border-purple-300 bg-purple-50">
+<div class="font-bold text-purple-700">③ 满足合规审计</div>
+<div class="text-xs mt-2">
+所有签发与拒绝事件写入<strong>不可篡改</strong>审计日志，记录调用链 ID / 操作主体 / 权限范围 / 策略版本。按 user / agent / task 维度查询 → 完整合规证据链。
+</div>
+</div>
+
+<div class="p-4 rounded-lg border border-amber-300 bg-amber-50">
+<div class="font-bold text-amber-700">④ 提升业务效率</div>
+<div class="text-xs mt-2">
+用户描述任务即可完成跨数据源整合 + 文档生成。AI 能力与数据安全<strong>不再相互妥协</strong> — 通用扩展能力：新 Agent 注册能力声明 + 委托白名单即可接入。
+</div>
+</div>
+
+</div>
+
+---
+
+# 相关产品调研
+
+| 方案 | 定位 | 与本项目差异 |
+|---|---|---|
+| **draft-aap-oauth-profile** (IETF 2026.02) | OAuth 2.0 + JWT + RFC 8693 + DPoP 组合规范 | 暂无实现；约束实现差异；One-Shot Token 等细节本项目做了进一步处理 |
+| **permit.io** | AI Agent 实时细粒度<strong>决策</strong>判定 | 判定决策本身是否合理，<strong>与权限模型不同</strong> |
+| **Okta for AI Agents** | 与本系统相似 | 闭源 · 强绑定云 SaaS · 实现不可知 |
+| **Veto** | 单 Agent 策略引擎 | 与本系统定位不同 |
+| **Portkey Agent Gateway** | Agent Gateway | <strong>只记录流量状态</strong>，与本项目 Gateway 差异大 |
+| **Open Policy Agent (OPA)** | 通用策略引擎 | <strong>直接使用其方案</strong>，不重造轮子 |
+
+<div class="mt-6 p-3 rounded-lg bg-slate-50 text-xs">
+<strong>差异化定位</strong>：协议标准 + 零信任 + 最小权限 + 全链审计 + 多框架 adapter，端到端开源实现
+</div>
+
+---
+layout: section
+---
+
+# 七、团队与代码
+
+---
+
+# 分工与产出
+
+<div class="grid grid-cols-3 gap-4 mt-4 text-xs">
+
+<div class="p-4 rounded-lg bg-blue-50 border border-blue-200">
+<div class="font-bold text-base">陈奕燔 <span class="text-xs opacity-60 font-normal">· 组长</span></div>
+<div class="mt-3 space-y-1">
+
+- **IdP**：身份授权 / Token 签发 / 验证 / 能力管理 / 计划校验 / 令牌吊销
+- **OPA**：10 条规则全 AND 决策，reasons 集合返回
+- **AuditApi**：早期编写
+
+</div>
+<div class="text-xs opacity-60 mt-3">网络空间安全学院 网络工程</div>
+</div>
+
+<div class="p-4 rounded-lg bg-emerald-50 border border-emerald-200">
+<div class="font-bold text-base">周展鹏 <span class="text-xs opacity-60 font-normal">· 组员</span></div>
+<div class="mt-3 space-y-1">
+
+- **Gateway**：身份/权限校验、审计写入、调用链追踪
+- **Web-UI 初版**：dashboard、撤销、聊天接入
+- **Audit 测试**
+
+</div>
+<div class="text-xs opacity-60 mt-3">卓越学院 智能安全</div>
+</div>
+
+<div class="p-4 rounded-lg bg-purple-50 border border-purple-200">
+<div class="font-bold text-base">金梓墨 <span class="text-xs opacity-60 font-normal">· 组员</span></div>
+<div class="mt-3 space-y-1">
+
+- **多 Agents 体系架构** + 飞书 Open Platform 接入
+- LangGraph **doc_assistant** 多节点编排 + 公共 Agent 基础层
+- **SDK**：Assertion + Token Exchange + DPoP 零信任客户端
+- 飞书端到端调用链路打通
+
+</div>
+<div class="text-xs opacity-60 mt-3">卓越学院 计算机科学英才班</div>
+</div>
+
+</div>
+
+<div class="mt-6 text-center text-xs opacity-60">
+GitHub: <a href="https://github.com/Woor3x/Agent-Token">github.com/Woor3x/Agent-Token</a>
+</div>
+
+---
+layout: center
+class: text-center
+---
+
+# 决赛冲刺期更新
+
+<div class="mt-8 grid grid-cols-2 gap-4 text-left text-xs max-w-4xl mx-auto">
+
+<div>
+
+- ✅ 修复 Gateway 丢失的 2 个审计事件（`key_rotated` / `plan_validated`）
+- ✅ Gateway plan mode 补全 JWT + DPoP 校验
+- ✅ 更新 Gateway 测试模块
+- ✅ 新增 Audit API 测试模块
+- ✅ 前端状态管理添加
+
+</div>
+<div>
+
+- ✅ IdP 测试脚本升级（覆盖更全、信息更详）
+- ✅ 删除 IdP 预校验功能（职责划分清晰）
+- ✅ 修复 IdP jti 缓存过期过短的重放风险
+- ✅ web_agent 搜索逻辑 + 恶意攻击防护更新
+- ✅ SDK 真接入 LangChain `StructuredTool`
+
+</div>
+
+</div>
+
+<div class="mt-12 text-sm opacity-70">
+所有更新均经测试覆盖 · 测试矩阵详见 <code>docs/test/</code>
+</div>
+
+---
+layout: center
+class: text-center
+---
+
+# Thank You
+
+<div class="text-xl mt-8 opacity-80">
+A2A-Token-System — 让 Agent 协作既安全又可信
+</div>
+
+<div class="mt-16 text-sm opacity-70">
+
+📂 <a href="https://github.com/Woor3x/Agent-Token">github.com/Woor3x/Agent-Token</a>
+
+</div>
+
+<div class="mt-4 text-xs opacity-50">
+飞书 AI 校园挑战赛 · 决赛 · 2026
+</div>
+
+<!--
+Q&A 准备：
+- 为什么不直接用 OAuth?  → 没有机器代机器细粒度授权
+- 为什么不用 Okta?  → 闭源 + 强绑定 SaaS
+- 性能数据 / 测试覆盖率 → 引导到 docs/test
+-->
