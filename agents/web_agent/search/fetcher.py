@@ -7,11 +7,11 @@ issue a size-capped streaming GET.
 Domain allowlist can be relaxed via ``WEB_FETCH_DOMAIN_OPEN=true`` for use
 cases that fetch arbitrary URLs returned by a search backend. Even with the
 domain check disabled, scheme=https, blocked CIDRs (RFC1918, loopback,
-link-local incl. cloud metadata 169.254.169.254), redirect blocking, and
-size caps remain enforced.
+link-local incl. cloud metadata 169.254.169.254), and size caps remain enforced.
 """
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import os
 import socket
@@ -251,7 +251,7 @@ async def http_fetch(
     if not ok:
         raise FetchBlocked(reason)
     own = client is None
-    c = client or httpx.AsyncClient(timeout=timeout, follow_redirects=False)
+    c = client or httpx.AsyncClient(timeout=timeout, follow_redirects=True, max_redirects=5)
     try:
         async with c.stream("GET", url) as r:
             r.raise_for_status()
@@ -263,7 +263,10 @@ async def http_fetch(
                 if total > max_size:
                     raise FetchBlocked("size_exceeded")
                 chunks.append(buf)
-        return _decode_body(b"".join(chunks), ctype)
+        raw = b"".join(chunks)
+        return await asyncio.get_running_loop().run_in_executor(
+            None, _decode_body, raw, ctype
+        )
     finally:
         if own:
             await c.aclose()
