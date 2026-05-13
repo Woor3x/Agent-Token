@@ -235,3 +235,66 @@ P4 45s：
 -->
 
 ---
+
+<!-- P5 · 项目亮点 ① 协议栈 + 零信任 A2A · § 二-1-3) -->
+
+<div class="absolute top-4 right-6 text-xs text-gray-400">§ 二-1-3) ①</div>
+
+# 亮点 ①：标准协议栈 + 零信任 A2A
+
+<div class="grid grid-cols-6 gap-2 mb-4 text-xs">
+  <div class="p-2 rounded border border-gray-300 bg-white text-center">
+    <div class="font-bold">RFC 7519</div><div class="text-gray-500">JWT</div>
+  </div>
+  <div class="p-2 rounded border border-gray-300 bg-white text-center">
+    <div class="font-bold">RFC 7523</div><div class="text-gray-500">Client Assertion</div>
+  </div>
+  <div class="p-2 rounded border border-gray-300 bg-white text-center">
+    <div class="font-bold">RFC 7636</div><div class="text-gray-500">PKCE</div>
+  </div>
+  <div class="p-2 rounded border border-gray-300 bg-white text-center">
+    <div class="font-bold">RFC 7638</div><div class="text-gray-500">JWK Thumbprint</div>
+  </div>
+  <div class="p-2 rounded border-2 border-rose-400 bg-rose-50 text-center">
+    <div class="font-bold">RFC 8693</div><div class="text-rose-600">Token Exchange ★</div>
+  </div>
+  <div class="p-2 rounded border-2 border-rose-400 bg-rose-50 text-center">
+    <div class="font-bold">RFC 9449</div><div class="text-rose-600">DPoP ★</div>
+  </div>
+</div>
+
+```mermaid {scale: 0.55}
+sequenceDiagram
+  participant C as Caller Agent
+  participant I as IdP
+  participant G as Gateway
+  participant T as Target Agent
+  C->>I: client_assertion (60s) + DPoP + 上游 token
+  I->>I: 三验：assertion / DPoP / scope ∩
+  I-->>C: one-shot token (120s, sub_jti)
+  C->>G: 调用 + DPoP proof
+  G->>G: JWKS 验签 + cnf.jkt 匹配
+  G->>T: 转发
+  G-->>Audit: jti / jkt / decision
+```
+
+<div class="grid grid-cols-3 gap-3 mt-2 text-xs">
+  <div class="p-2 rounded bg-blue-50 border border-blue-200">
+    <b>assertion</b> 证身份
+  </div>
+  <div class="p-2 rounded bg-blue-50 border border-blue-200">
+    <b>one-shot token</b> 防重放
+  </div>
+  <div class="p-2 rounded bg-blue-50 border border-blue-200">
+    <b>DPoP</b> 防盗用
+  </div>
+</div>
+
+<!--
+P5 55s：
+- 6 RFC 不念，扫一眼即可。重点钉两颗星：8693 与 9449
+- sequence 图主讲：IdP 三验 + Gateway cnf.jkt 复验
+- 时序图证明：标准协议栈，复用 IETF，没有自创轮子
+-->
+
+---
