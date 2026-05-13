@@ -785,84 +785,12 @@ P9 Gateway 30s
 ---
 
 <!-- ============================================================ -->
-<!-- P10 · 模块③ Agents 编排 + 执行 -->
+<!-- P10 · 模块③ 审计 · 撤销 · 生态 -->
 
 <div class="page-num">10 / 14</div>
 <div class="page-anchor">§ 05 · MODULE III</div>
 
-<div class="eyebrow">05.3 · 模块③ · Agent 编排与执行</div>
-<h1>Agents — <span class="ok-c">orchestrator</span> · <span class="ok-c">executor</span> 严格分离</h1>
-<div class="hr-soft"></div>
-
-<div class="grid grid-cols-3 gap-4 mt-4">
-
-<div class="card" style="border-color: #10B981;">
-  <div class="card-mono" style="color: #10B981;">ORCHESTRATOR</div>
-  <div class="card-title">doc_assistant</div>
-  <div class="card-body mt-2">
-    LangGraph DAG · LLM JSON mode + 规则回退<br/>
-    <code>_topo_layers</code> 拓扑分层<br/>
-    <code>asyncio.gather</code> 同层并发<br/>
-    <code>validate_dag()</code> 失败 LLM 重试
-  </div>
-</div>
-
-<div class="card">
-  <div class="card-mono">EXECUTOR</div>
-  <div class="card-title">data_agent</div>
-  <div class="card-body mt-2">
-    Intent 路由（regex 匹配）<br/>
-    飞书 OpenAPI：bitable / docx / contact / calendar / drive<br/>
-    Prompt Injection 清洗<br/>
-    无 LLM · 纯确定性
-  </div>
-</div>
-
-<div class="card">
-  <div class="card-mono">EXECUTOR</div>
-  <div class="card-title">web_agent</div>
-  <div class="card-body mt-2">
-    <code>web.search</code> · Tavily 检索<br/>
-    <code>web.fetch</code> · HTML 提取 + LLM 摘要<br/>
-    URL allowlist 限制<br/>
-    速率限制 + 安全提取
-  </div>
-</div>
-
-</div>
-
-<div class="hr-soft mt-6"></div>
-
-<div class="grid grid-cols-2 gap-6 mt-4 text-sm">
-  <div>
-    <div class="card-mono accent">SOD · SEPARATION OF DUTIES</div>
-    <div class="card-body mt-1">
-      <code>@field_validator("role")</code> 启动期强制 orchestrator XOR executor，互斥防越权升级。
-    </div>
-  </div>
-  <div>
-    <div class="card-mono accent">SHARED SDK</div>
-    <div class="card-body mt-1">
-      屏蔽 RFC 8693 TE + RFC 9449 DPoP + W3C traceparent · <code>capability.find()</code> 调用前匹配。
-    </div>
-  </div>
-</div>
-
-<!--
-P9 45s
-- 三卡 + 共享栏 = orchestrator/executor 分离落地
-- 钉点：SoD 互斥 + SDK 屏蔽细节
--->
-
----
-
-<!-- ============================================================ -->
-<!-- P11 · 模块④ 审计 · 撤销 · 生态 -->
-
-<div class="page-num">11 / 14</div>
-<div class="page-anchor">§ 05 · MODULE IV</div>
-
-<div class="eyebrow">05.4 · 模块④ · 可观测与生态</div>
+<div class="eyebrow">05.3 · 模块③ · 可观测与生态</div>
 <h1>Audit · 撤销 · 生态适配</h1>
 <div class="hr-soft"></div>
 
@@ -923,6 +851,78 @@ KEY_MAP = {
 P10 40s
 - 信息密度型 2×2，每卡一条钉子
 - 77 测试数字给评委"工程严谨"印象
+-->
+
+---
+
+<!-- ============================================================ -->
+<!-- P11 · 模块④ Agents 编排 + 执行 -->
+
+<div class="page-num">11 / 14</div>
+<div class="page-anchor">§ 05 · MODULE IV</div>
+
+<div class="eyebrow">05.4 · 模块④ · Agent 编排与执行</div>
+<h1>Agents — <span class="ok-c">orchestrator</span> · <span class="ok-c">executor</span> 严格分离</h1>
+<div class="hr-soft"></div>
+
+<div class="grid grid-cols-3 gap-4 mt-4">
+
+<div class="card" style="border-color: #10B981;">
+  <div class="card-mono" style="color: #10B981;">ORCHESTRATOR</div>
+  <div class="card-title">doc_assistant</div>
+  <div class="card-body mt-2">
+    LangGraph DAG · LLM JSON mode + 规则回退<br/>
+    <code>_topo_layers</code> 拓扑分层<br/>
+    <code>asyncio.gather</code> 同层并发<br/>
+    <code>validate_dag()</code> 失败 LLM 重试
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-mono">EXECUTOR</div>
+  <div class="card-title">data_agent</div>
+  <div class="card-body mt-2">
+    Intent 路由（regex 匹配）<br/>
+    飞书 OpenAPI：bitable / docx / contact / calendar / drive<br/>
+    Prompt Injection 清洗<br/>
+    无 LLM · 纯确定性
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-mono">EXECUTOR</div>
+  <div class="card-title">web_agent</div>
+  <div class="card-body mt-2">
+    <code>web.search</code> · Tavily 检索<br/>
+    <code>web.fetch</code> · HTML 提取 + LLM 摘要<br/>
+    URL allowlist 限制<br/>
+    速率限制 + 安全提取
+  </div>
+</div>
+
+</div>
+
+<div class="hr-soft mt-6"></div>
+
+<div class="grid grid-cols-2 gap-6 mt-4 text-sm">
+  <div>
+    <div class="card-mono accent">SOD · SEPARATION OF DUTIES</div>
+    <div class="card-body mt-1">
+      <code>@field_validator("role")</code> 启动期强制 orchestrator XOR executor，互斥防越权升级。
+    </div>
+  </div>
+  <div>
+    <div class="card-mono accent">SHARED SDK</div>
+    <div class="card-body mt-1">
+      屏蔽 RFC 8693 TE + RFC 9449 DPoP + W3C traceparent · <code>capability.find()</code> 调用前匹配。
+    </div>
+  </div>
+</div>
+
+<!--
+P11 45s
+- 三卡 + 共享栏 = orchestrator/executor 分离落地
+- 钉点：SoD 互斥 + SDK 屏蔽细节
 -->
 
 ---
