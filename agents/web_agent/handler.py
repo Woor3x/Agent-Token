@@ -1,6 +1,7 @@
 """WebAgent business handler (see 方案-Agents §6.2)."""
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import httpx
@@ -89,7 +90,9 @@ class WebAgentHandler:
                     "length": 0,
                     "error": f"{type(e).__name__}: {e}"[:200],
                 }
-            text = _extract_text(raw)
+            text = await asyncio.get_running_loop().run_in_executor(
+                None, _extract_text, raw
+            )
             query = params.get("query")
             # 2c: LLM-synthesized summary, raw text never returned/stored.
             summary = await summarize_with_llm(text, query=query)
