@@ -19,6 +19,47 @@ drawings:
   persist: false
 ---
 
+<style>
+:root {
+  --slidev-theme-primary: #3370FF;
+}
+.slidev-layout h1 {
+  color: #1F2329;
+  letter-spacing: -0.01em;
+}
+.slidev-layout {
+  font-family: 'PingFang SC', 'Inter', system-ui, sans-serif;
+  color: #1F2329;
+}
+.slidev-layout .text-gray-500,
+.slidev-layout .text-gray-600,
+.slidev-layout .text-gray-700 {
+  color: #646A73;
+}
+.slidev-layout .text-gray-400 {
+  color: #8F959E;
+}
+/* Card style: Feishu uses soft elevation + rounded-lg */
+.slidev-layout [class*="border-"] {
+  box-shadow: 0 1px 2px rgba(31, 35, 41, 0.04), 0 1px 3px rgba(31, 35, 41, 0.06);
+}
+/* Feishu blue accents */
+.slidev-layout .bg-blue-50 { background-color: #F0F4FF !important; }
+.slidev-layout .border-blue-200 { border-color: #3370FF !important; border-opacity: 0.3; }
+/* Mermaid sizing override */
+.slidev-layout .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+code {
+  background-color: #F5F6F7;
+  color: #1F2329;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+</style>
+
 <!-- P1 · 封面 · § 一、 -->
 
 <div class="absolute top-4 right-6 text-xs text-gray-400">§ 一、</div>
