@@ -129,3 +129,56 @@ P2 35s：
 -->
 
 ---
+
+<!-- P3 · 系统架构 · § 二-1-2) 设计 -->
+
+<div class="absolute top-4 right-6 text-xs text-gray-400">§ 二-1-2)</div>
+
+# 系统架构
+
+```mermaid {scale: 0.55}
+flowchart LR
+  U[User<br/>Web 前端]:::user
+  IDP[IdP<br/>OIDC + TE]:::sec
+  GW[Gateway<br/>authn+OPA]:::sec
+  OPA[OPA<br/>Rego]:::sec
+  AUDIT[Audit API<br/>SQLite+SSE]:::audit
+  DOC[doc_assistant<br/>orchestrator]:::ai
+  DATA[data_agent<br/>executor]:::ai
+  WEB[web_agent<br/>executor]:::ai
+  FS[飞书 OpenAPI]:::ext
+  TAV[Tavily]:::ext
+
+  U -->|OIDC PKCE| IDP
+  U --> GW
+  GW -.JWKS.- IDP
+  GW -->|per-call decide| OPA
+  GW --> DOC
+  DOC -->|TE 委托| IDP
+  DOC --> GW
+  GW --> DATA
+  GW --> WEB
+  DATA --> FS
+  WEB --> TAV
+  GW -.记录.- AUDIT
+  IDP -.记录.- AUDIT
+
+  classDef sec fill:#fff1f2,stroke:#fb7185,stroke-width:1.5px
+  classDef audit fill:#fffbeb,stroke:#fbbf24,stroke-width:1.5px
+  classDef ai fill:#ecfdf5,stroke:#34d399,stroke-width:1.5px
+  classDef user fill:#eef2ff,stroke:#818cf8,stroke-width:1.5px
+  classDef ext fill:#f1f5f9,stroke:#64748b,stroke-width:1px
+```
+
+<div class="text-xs text-gray-500 text-center mt-4">
+标准协议栈（OIDC + Token Exchange + DPoP）· 职责严格分离（orchestrator / executor 互斥）
+</div>
+
+<!--
+P3 50s：
+- 节点配色与 P2 模块卡片对齐
+- 强调三条主线：用户登录、Agent 间委托（TE）、per-call 鉴权
+- 引出下一页"三步走"展开数据流
+-->
+
+---
