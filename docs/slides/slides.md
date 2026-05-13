@@ -419,3 +419,70 @@ P7 40s：
 -->
 
 ---
+
+<!-- P8 · AI 亮点 · § 二-1-4) -->
+
+<div class="absolute top-4 right-6 text-xs text-gray-400">§ 二-1-4)</div>
+
+# AI 亮点：功能侧 + 工程侧
+
+<div class="grid grid-cols-2 gap-6 mt-4">
+
+<div>
+  <div class="text-sm font-bold mb-3 text-emerald-700">🎯 功能侧（产品中的 AI）</div>
+  <div class="space-y-2 text-xs">
+    <div class="p-2 rounded bg-emerald-50 border border-emerald-200">
+      <b>① 结构化 DAG 编排</b><br/>
+      <span class="text-gray-600">Schema 校验不合规直接拒，杜绝幻觉跑偏</span>
+    </div>
+    <div class="p-2 rounded bg-emerald-50 border border-emerald-200">
+      <b>② 结构化输出抑制幻觉</b><br/>
+      <span class="text-gray-600">Function Calling + Pydantic 强约束</span>
+    </div>
+    <div class="p-2 rounded bg-emerald-50 border border-emerald-200">
+      <b>③ AI 与安全完全隔离</b><br/>
+      <span class="text-gray-600">AI 路径无授权决策权 — 故障不污染安全</span>
+    </div>
+    <div class="p-2 rounded bg-emerald-50 border border-emerald-200">
+      <b>④ 用户描述目标即完成</b><br/>
+      <span class="text-gray-600">DAG 自动拓扑分层并发 — 多源任务一句话搞定</span>
+    </div>
+  </div>
+</div>
+
+<div>
+  <div class="text-sm font-bold mb-3 text-indigo-700">🛠 工程侧（开发中的 AI）</div>
+  <div class="space-y-2 text-xs">
+    <div class="p-2 rounded bg-indigo-50 border border-indigo-200">
+      <b>① 需求 → 方案</b><br/>
+      <span class="text-gray-600">AI 头脑风暴备选 → 人工拍板</span>
+    </div>
+    <div class="p-2 rounded bg-indigo-50 border border-indigo-200">
+      <b>② 架构 → 设计文档</b><br/>
+      <span class="text-gray-600">AI 写 spec 作为编码"合同"</span>
+    </div>
+    <div class="p-2 rounded bg-indigo-50 border border-indigo-200">
+      <b>③ 编码 Plan-Act</b><br/>
+      <span class="text-gray-600">先出 plan 拆任务，再 Act 执行</span>
+    </div>
+    <div class="p-2 rounded bg-indigo-50 border border-indigo-200">
+      <b>④ 测试与审计</b><br/>
+      <span class="text-gray-600">AI 定位根因 → 人工确认提交</span>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<div class="text-xs text-gray-500 text-center mt-4">
+模型选型：<b>Doubao Seed 2.0 Pro</b>（功能侧调用）· <b>Claude Sonnet 4.6</b>（工程侧协作）
+</div>
+
+<!--
+P8 60s — 最重 AI 创新页：
+- 功能侧第①②点回应"AI 关键作用 + 抑制幻觉"
+- 工程侧整套展示"AI 全流程参与开发" — 评委会问"你们怎么用 AI"
+- 模型选型钉脚：选型有理由（性价比 + 可控）
+-->
+
+---
