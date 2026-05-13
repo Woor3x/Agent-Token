@@ -541,3 +541,35 @@ P9 45s：
 -->
 
 ---
+
+<!-- P10 · 相关产品调研 · § 三、 -->
+
+<div class="absolute top-4 right-6 text-xs text-gray-400">§ 三、</div>
+
+# 相关产品调研
+
+<div class="text-sm mt-4">
+
+| 方案 | 定位 | 与本项目差异 |
+|---|---|---|
+| **draft-aap-oauth-profile** | IETF 组合规范 | 草案 · 无开源实现 · 细节实现不同 |
+| **permit.io** | 决策判定（PDP） | 不解决 token 委托 · 权限模型不同 |
+| **Okta for AI Agents** | 闭源 SaaS | 强绑定 Okta 平台 · 国内合规风险 |
+| **Veto** | 单 Agent 策略 | 单 Agent 视角 · 不做 A2A 委托 |
+| **Portkey Agent Gateway** | LLM 流量代理 | 只记录不裁决 · 无授权能力 |
+| **OPA** | 通用策略引擎 | <b>直接复用，不重造</b> |
+
+</div>
+
+<div class="mt-5 p-3 rounded bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 text-center text-sm">
+<b>差异化定位</b>：标准协议栈 + 零信任 + 最小权限 + 全链审计 + 多框架 adapter — <b>五位一体</b>
+</div>
+
+<!--
+P10 30s：
+- 表格快速扫，不逐行念
+- 重点强调最后一行：OPA 我们复用 — 体现"工程理性"
+- 底部"五位一体"是差异化收尾
+-->
+
+---
