@@ -236,6 +236,70 @@ P4 45s：
 
 ---
 
+<!-- P5 · Agents 实现 · § 二-1-2) 补充 -->
+
+<div class="absolute top-4 right-6 text-xs text-gray-400">§ 二-1-2)</div>
+
+# Agents 实现：编排者 + 执行者
+
+<div class="grid grid-cols-3 gap-3 mt-4 text-xs">
+
+<div class="p-3 rounded-lg border-2 border-emerald-200 bg-emerald-50">
+  <div class="font-bold text-sm mb-1">doc_assistant</div>
+  <div class="text-emerald-700 mb-2"><b>orchestrator</b></div>
+  <div class="space-y-1 text-gray-700">
+    <div>• LangGraph DAG 编排</div>
+    <div>• <code>planner</code>：LLM JSON mode + 规则回退</div>
+    <div>• <code>_topo_layers</code> 拓扑分层</div>
+    <div>• <code>asyncio.gather</code> 同层并发</div>
+    <div>• <code>validate_dag()</code> 失败重试</div>
+  </div>
+</div>
+
+<div class="p-3 rounded-lg border-2 border-sky-200 bg-sky-50">
+  <div class="font-bold text-sm mb-1">data_agent</div>
+  <div class="text-sky-700 mb-2"><b>executor</b></div>
+  <div class="space-y-1 text-gray-700">
+    <div>• Intent 路由（regex 匹配）</div>
+    <div>• 飞书 OpenAPI：bitable / docx / contact / calendar / drive</div>
+    <div>• Prompt Injection 清洗</div>
+    <div>• 无 LLM · 纯确定性</div>
+  </div>
+</div>
+
+<div class="p-3 rounded-lg border-2 border-sky-200 bg-sky-50">
+  <div class="font-bold text-sm mb-1">web_agent</div>
+  <div class="text-sky-700 mb-2"><b>executor</b></div>
+  <div class="space-y-1 text-gray-700">
+    <div>• <code>web.search</code> · Tavily 检索</div>
+    <div>• <code>web.fetch</code> · HTML 提取 + LLM 摘要</div>
+    <div>• URL allowlist 限制</div>
+    <div>• 速率限制 + 安全提取</div>
+  </div>
+</div>
+
+</div>
+
+<div class="mt-4 p-3 rounded bg-indigo-50 border border-indigo-200 text-xs">
+  <div class="font-bold text-sm mb-2">共享基础设施</div>
+  <div class="grid grid-cols-2 gap-2 text-gray-700">
+    <div>• <b>SDK</b>：屏蔽 RFC 8693 TE + RFC 9449 DPoP + W3C traceparent</div>
+    <div>• <b>AgentServer</b> 基类 · <code>capability.find()</code> 调用前匹配</div>
+    <div>• <code>@field_validator("role")</code> 强制 orchestrator / executor 互斥</div>
+    <div>• 三框架 adapter：LangChain · LangGraph · AutoGen</div>
+  </div>
+</div>
+
+<!--
+P5 Agents 实现 35s：
+- 一句一句过：doc_assistant 编排 / 两个 executor 执行
+- 重点：role 互斥是 SoD（职责分离）落地
+- adapter 三选一对应三种主流多 Agent 框架
+- 时长压缩：可秒过共享栏，重点在三卡
+-->
+
+---
+
 <!-- P5 · 项目亮点 ① 协议栈 + 零信任 A2A · § 二-1-3) -->
 
 <div class="absolute top-4 right-6 text-xs text-gray-400">§ 二-1-3) ①</div>
