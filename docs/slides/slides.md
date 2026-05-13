@@ -305,7 +305,7 @@ A2A-Token-<span class="accent">System</span>
 </div>
 
 <div class="mt-10 dim text-xs" style="font-family: 'JetBrains Mono', monospace;">
-HDU · github.com/your-org/A2A-Token-System
+HDU · https://github.com/Woor3x/Agent-Token
 </div>
 
 </div>
@@ -1101,7 +1101,7 @@ Thank <span class="accent" style="font-style: italic;">You</span>
 </div>
 
 <div class="mt-10 dim text-xs" style="font-family: 'JetBrains Mono', monospace;">
-github.com/your-org/A2A-Token-System
+https://github.com/Woor3x/Agent-Token
 </div>
 
 <div class="mt-3 text-xs mute" style="font-family: 'JetBrains Mono', monospace;">

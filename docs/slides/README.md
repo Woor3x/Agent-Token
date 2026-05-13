@@ -27,7 +27,7 @@ npx slidev export --format pptx
 
 ## 文件清单
 
-- `slides.md` — 主幻灯片源（13 页）
+- `slides.md` — 主幻灯片源（14 页）
 - `package.json` — slidev 依赖
 - `public/` — 静态资源；放 demo-fallback.mp4（不入库，本地置入）
 - 主题：`@slidev/theme-seriph`
@@ -43,13 +43,14 @@ npx slidev export --format pptx
 | P5 | 解决方案 — 三支柱 | 30s |
 | P6 | 整体架构 | 50s |
 | P7 | 模块① IdP + Token Exchange | 45s |
-| P8 | 模块② Gateway × OPA | 45s |
-| P9 | 模块③ Agents 编排+执行 | 45s |
-| P10 | 模块④ 审计·撤销·生态 | 40s |
-| P11 | AI 亮点（功能+工程） | 55s |
-| P12 | 对比 · 创新 · 价值 | 40s |
-| P13 | 谢幕 + 团队 | 20s |
-| **总** | | **480s = 8 min** |
+| P8 | 模块② OPA 策略引擎 | 30s |
+| P9 | 模块② Gateway 唯一入口 | 30s |
+| P10 | 模块③ 审计 · 撤销 · 生态 | 40s |
+| P11 | 模块④ Agents 编排+执行 | 45s |
+| P12 | AI 亮点（功能+工程） | 55s |
+| P13 | 对比 · 创新 · 价值 | 40s |
+| P14 | 谢幕 + 团队 | 5s |
+| **总** | | **490s ≈ 8 min**（缓冲 -10s） |
 
 ## Demo 策略
 
