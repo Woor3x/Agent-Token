@@ -182,3 +182,56 @@ P3 50s：
 -->
 
 ---
+
+<!-- P4 · 系统功能简述 · § 二-1-2) 简述 -->
+
+<div class="absolute top-4 right-6 text-xs text-gray-400">§ 二-1-2)</div>
+
+# 系统功能简述
+
+<div class="grid grid-cols-3 gap-5 mt-6">
+
+<div class="p-4 rounded-lg border-2 border-indigo-200 bg-indigo-50">
+  <div class="text-3xl mb-1">①</div>
+  <div class="font-bold text-base mb-2">用户登录</div>
+  <div class="text-xs text-gray-700 leading-relaxed">
+    OIDC + PKCE（RFC 7636）<br/>
+    抗授权码截获<br/>
+    一次性 code → access_token
+  </div>
+</div>
+
+<div class="p-4 rounded-lg border-2 border-rose-200 bg-rose-50">
+  <div class="text-3xl mb-1">②</div>
+  <div class="font-bold text-base mb-2">Token Exchange</div>
+  <div class="text-xs text-gray-700 leading-relaxed">
+    RFC 8693 委托链<br/>
+    客户端 assertion + DPoP + 上游 token<br/>
+    <b>120s 一次性</b> · sub_jti 绑定
+  </div>
+</div>
+
+<div class="p-4 rounded-lg border-2 border-emerald-200 bg-emerald-50">
+  <div class="text-3xl mb-1">③</div>
+  <div class="font-bold text-base mb-2">执行鉴权</div>
+  <div class="text-xs text-gray-700 leading-relaxed">
+    Gateway 验签 + per-call OPA<br/>
+    Rego 全 AND 决策<br/>
+    Audit 全程记录
+  </div>
+</div>
+
+</div>
+
+<div class="mt-8 p-3 rounded bg-amber-50 border border-amber-200 text-sm text-center">
+🔒 <b>AI 链路</b>（编排 / 调用 / 输出）与 <b>安全链路</b>（IdP / GW / OPA）<b>严格隔离</b> — AI 故障不污染授权决策
+</div>
+
+<!--
+P4 45s：
+- 用三栏对照 P3 三条主线，落到"做什么"
+- 强调 ② 的 120s 一次性是核心创新点之一
+- 底部隔离提示是技术亮点 — 为 P8 铺垫
+-->
+
+---
