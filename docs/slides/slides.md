@@ -57,3 +57,75 @@ drawings:
 -->
 
 ---
+
+<!-- P2 · 核心代码模块速览 · § 二-1-1) -->
+
+<div class="absolute top-4 right-6 text-xs text-gray-400">§ 二-1-1)</div>
+
+# 核心代码模块速览
+
+<div class="grid grid-cols-4 gap-3 mt-6 text-sm">
+
+<div class="p-3 rounded border border-rose-200 bg-rose-50">
+  <div class="font-bold">IdP</div>
+  <div class="text-xs text-gray-500 font-mono">/token/exchange</div>
+  <div class="text-xs mt-1">三验签发委托 token · 按需最小权限</div>
+</div>
+
+<div class="p-3 rounded border border-rose-200 bg-rose-50">
+  <div class="font-bold">Gateway</div>
+  <div class="text-xs text-gray-500 font-mono">authn_middleware</div>
+  <div class="text-xs mt-1">唯一入口 JWKS 验签 + per-call OPA 复核</div>
+</div>
+
+<div class="p-3 rounded border border-rose-200 bg-rose-50">
+  <div class="font-bold">OPA</div>
+  <div class="text-xs text-gray-500 font-mono">agent.authz / a2a.rego</div>
+  <div class="text-xs mt-1">Rego 10 条全 AND · 决策与代码解耦</div>
+</div>
+
+<div class="p-3 rounded border border-amber-200 bg-amber-50">
+  <div class="font-bold">Audit API</div>
+  <div class="text-xs text-gray-500 font-mono">BatchWriter</div>
+  <div class="text-xs mt-1">asyncio.Queue → SQLite 批写 + SSE 广播</div>
+</div>
+
+<div class="p-3 rounded border border-emerald-200 bg-emerald-50">
+  <div class="font-bold">SDK</div>
+  <div class="text-xs text-gray-500 font-mono">client.invoke</div>
+  <div class="text-xs mt-1">屏蔽 DPoP + TE · 三框架 adapter</div>
+</div>
+
+<div class="p-3 rounded border border-emerald-200 bg-emerald-50">
+  <div class="font-bold">doc_assistant</div>
+  <div class="text-xs text-gray-500 font-mono">dispatcher._topo_layers</div>
+  <div class="text-xs mt-1">LangGraph DAG 拓扑分层并发执行</div>
+</div>
+
+<div class="p-3 rounded border border-sky-200 bg-sky-50">
+  <div class="font-bold">data_agent / web_agent</div>
+  <div class="text-xs text-gray-500 font-mono">tool dispatcher</div>
+  <div class="text-xs mt-1">飞书 OpenAPI + Tavily 检索</div>
+</div>
+
+<div class="p-3 rounded border border-indigo-200 bg-indigo-50">
+  <div class="font-bold">Web 前端</div>
+  <div class="text-xs text-gray-500 font-mono">OIDC PKCE</div>
+  <div class="text-xs mt-1">RFC 7636 抗授权码截获</div>
+</div>
+
+</div>
+
+<div class="text-center text-sm text-gray-500 mt-6">
+下一页看 7 模块如何协同 →
+</div>
+
+<!--
+P2 35s：
+- 横扫 7 模块，让评委建立"这是 7 个独立组件的协作"心智
+- 配色：红=安全核心、橙=审计、绿=AI编排、蓝=业务Agent、紫=用户前端
+- 这套配色 P3 架构图节点继承
+- 结束句引向 P3
+-->
+
+---
