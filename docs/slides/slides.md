@@ -353,3 +353,69 @@ P6 55s：
 -->
 
 ---
+
+<!-- P7 · 亮点 ③ 撤销+职责+审计+生态 · § 二-1-3) -->
+
+<div class="absolute top-4 right-6 text-xs text-gray-400">§ 二-1-3) ③</div>
+
+# 亮点 ③：撤销 · 职责 · 审计 · 生态
+
+<div class="grid grid-cols-2 gap-4 mt-4 text-sm">
+
+<div class="p-3 rounded border border-rose-200 bg-rose-50">
+  <div class="font-bold mb-2">6 维即时撤销</div>
+
+```python {all|2-7}
+revocation_sets = {
+  "jti":   "单 token",
+  "sub":   "用户级",
+  "agent": "Agent 级",
+  "trace": "调用链",
+  "plan":  "任务计划",
+  "chain": "委托链",
+}
+# Redis Pub/Sub → 全集群秒级生效
+```
+
+</div>
+
+<div class="p-3 rounded border border-purple-200 bg-purple-50">
+  <div class="font-bold mb-2">职责严格分离</div>
+  <div class="text-xs space-y-1">
+    <div>• <code class="text-purple-700">role = orchestrator</code> 只能编排</div>
+    <div>• <code class="text-purple-700">role = executor</code> 只能执行</div>
+    <div>• <b>field_validator</b> 注册时强制</div>
+    <div>• 互斥防止越权升级</div>
+  </div>
+</div>
+
+<div class="p-3 rounded border border-amber-200 bg-amber-50">
+  <div class="font-bold mb-2">完整审计链</div>
+  <div class="text-xs space-y-1">
+    <div>• W3C <b>traceparent</b> + OpenTelemetry</div>
+    <div>• 字段：decision / reasons / jti / jkt / scope / sub</div>
+    <div>• SQLite 不可篡改 + SSE 实时</div>
+    <div>• 多维查询：按用户 / Agent / 链路</div>
+  </div>
+</div>
+
+<div class="p-3 rounded border border-emerald-200 bg-emerald-50">
+  <div class="font-bold mb-2">与生态正交</div>
+  <div class="text-xs space-y-1">
+    <div>• <b>OPA</b> 复用（不重造策略引擎）</div>
+    <div>• Adapter：<b>LangChain / LangGraph / AutoGen</b></div>
+    <div>• 标准协议栈 — 任何框架可接入</div>
+    <div>• 70 / 70 SDK 测试用例</div>
+  </div>
+</div>
+
+</div>
+
+<!--
+P7 40s：
+- 2x2 信息密度型布局，与 P5/P6 完全不同
+- 6 维撤销是创新点：业界一般 1-2 维
+- adapter 矩阵证明生态兼容性 — 直接关联"可复用"评分
+-->
+
+---
