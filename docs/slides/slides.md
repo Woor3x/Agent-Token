@@ -573,3 +573,54 @@ P10 30s：
 -->
 
 ---
+
+<!-- P11 · 谢幕 + 团队 + Q&A · § 二-2 / § 四、 -->
+
+<div class="absolute top-4 right-6 text-xs text-gray-400">§ 二-2 / 四、</div>
+
+<div class="text-center">
+
+# Thank You
+
+<div class="text-base text-gray-500 mt-2 mb-8">期待你的提问</div>
+
+<div class="grid grid-cols-3 gap-3 max-w-3xl mx-auto mb-8 text-xs">
+
+<div class="p-3 rounded-lg border border-blue-200 bg-blue-50 text-left">
+  <div class="font-bold text-sm">陈奕燔 · 组长</div>
+  <div class="text-gray-600 mt-1">IdP / OPA / 早期 AuditApi</div>
+</div>
+
+<div class="p-3 rounded-lg border border-blue-200 bg-blue-50 text-left">
+  <div class="font-bold text-sm">周展鹏</div>
+  <div class="text-gray-600 mt-1">Gateway / Web 前端 / Audit 测试</div>
+</div>
+
+<div class="p-3 rounded-lg border border-blue-200 bg-blue-50 text-left">
+  <div class="font-bold text-sm">金梓墨</div>
+  <div class="text-gray-600 mt-1">Agents 架构 / SDK / 飞书接入</div>
+</div>
+
+</div>
+
+<div class="text-sm text-gray-500">
+github.com/your-org/A2A-Token-System
+</div>
+
+<div class="text-xs text-gray-400 mt-2">
+关键数字：120s 委托 · 6 维撤销 · 3 道关 · 6 RFC · 70/70 SDK 测试
+</div>
+
+</div>
+
+<!--
+P11 20s 谢幕：
+- 简短致谢 + 团队卡 + Github
+- speaker notes:
+  • Demo 兜底视频：docs/slides/public/demo-fallback.mp4 — Q&A 评委要求时由主持人切播 30s
+  • 补充材料按需调出：测试矩阵 / 完整审计字段 / Rego 全文
+  • Q&A 预案：
+    - 为何选 RFC 8693 而不是 OAuth on-behalf-of？标准 + 显式 actor 声明
+    - 6 维撤销如何不影响性能？Redis bitset + 本地 5s 缓存
+    - field_validator 如何防绕过？Pydantic 模型注册时强制 + 启动期失败
+-->
