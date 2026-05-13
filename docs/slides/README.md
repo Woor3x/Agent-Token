@@ -1,4 +1,4 @@
-# A2A-Token-System · 决赛答辩 PPT (Slidev)
+# A2A-Token-System · 决赛答辩 PPT (Slidev · Editorial Dark)
 
 按飞书 wiki《A2A-Token-system-决赛作品展示文档》目录顺序整理，使用 [Slidev](https://sli.dev) 渲染。
 
@@ -27,7 +27,7 @@ npx slidev export --format pptx
 
 ## 文件清单
 
-- `slides.md` — 主幻灯片源（12 页）
+- `slides.md` — 主幻灯片源（13 页）
 - `package.json` — slidev 依赖
 - `public/` — 静态资源；放 demo-fallback.mp4（不入库，本地置入）
 - 主题：`@slidev/theme-seriph`
@@ -37,20 +37,19 @@ npx slidev export --format pptx
 | 页 | 章节 | 时长 |
 |---|---|---|
 | P1 | 封面 | 15s |
-| P2 | 7 模块速览 | 35s |
-| P3 | 系统架构 | 50s |
-| P4 | 三步走 | 45s |
-| P5 | Agents 实现 | 35s |
-| P6 | 协议栈 + A2A | 55s |
-| P7 | 最小权限 + 三道关 | 55s |
-| P8 | 撤销 + 职责 + 审计 + 生态 | 40s |
-| P9 | AI 亮点 | 60s |
-| P10 | 落地价值 | 45s |
-| P11 | 产品调研 | 30s |
-| P12 | 谢幕 | 20s |
-| **总** | | **485s ≈ 8 min** |
-
-> 略超 8 min · dry-run 时可压缩 P7 或 P11
+| P2 | 汇报目录 | 15s |
+| P3 | 背景 — AI Agent 时代 | 35s |
+| P4 | 问题分析 — OAuth 失能 | 45s |
+| P5 | 解决方案 — 三支柱 | 30s |
+| P6 | 整体架构 | 50s |
+| P7 | 模块① IdP + Token Exchange | 45s |
+| P8 | 模块② Gateway × OPA | 45s |
+| P9 | 模块③ Agents 编排+执行 | 45s |
+| P10 | 模块④ 审计·撤销·生态 | 40s |
+| P11 | AI 亮点（功能+工程） | 55s |
+| P12 | 对比 · 创新 · 价值 | 40s |
+| P13 | 谢幕 + 团队 | 20s |
+| **总** | | **480s = 8 min** |
 
 ## Demo 策略
 
