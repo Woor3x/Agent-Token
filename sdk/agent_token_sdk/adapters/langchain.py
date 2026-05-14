@@ -1,10 +1,23 @@
 """LangChain tool factory (方案-SDK §8.2).
 
-``ctx_provider`` returns the per-call context (``user_token``, ``plan_id``, …)
-so the tool interface stays a plain ``(action, resource, params)`` signature for
-the LLM. If ``langchain_core`` is present we decorate with ``@tool``; otherwise
-we return a vanilla callable with a ``.name`` / ``.description`` attached, which
-remains useful for tests and non-LangChain hosts.
+When ``langchain_core`` is installed we build a ``StructuredTool`` via
+``StructuredTool.from_function`` with an explicit ``args_schema`` so the tool
+is fully compatible with LangChain ``AgentExecutor`` / ReAct loops:
+
+* avoids ``BaseTool`` pydantic-v2 frozen-field traps from late ``setattr``;
+* gives the LLM a precise schema (``action`` / ``resource`` / ``params``)
+  instead of relying on type-hint inference;
+* registers the coroutine via the ``coroutine=`` kwarg so async dispatch
+  works through ``ainvoke`` / ``arun``.
+
+When ``langchain_core`` is absent we fall back to a vanilla callable with
+``.name`` / ``.description`` attached — still drivable by tests and
+non-LangChain hosts. The caller-facing ``(action, resource, params)``
+signature is identical across both paths.
+
+``ctx_provider`` returns per-call context (``on_behalf_of`` / ``purpose`` /
+``plan_id`` / ``task_id`` / ``trace_id`` / ``idempotency_key``) — kept out of
+the tool signature so the LLM does not have to fabricate it.
 """
 from __future__ import annotations
 
@@ -30,11 +43,33 @@ def make_a2a_tool(
         return json.dumps(res.get("data", res))
 
     try:  # pragma: no cover — only when langchain_core is installed
-        from langchain_core.tools import tool
+        from langchain_core.tools import StructuredTool
+        from pydantic import BaseModel, Field
 
-        decorated = tool(description=description)(_call)
-        decorated.name = f"call_{target}"
-        return decorated
+        class _A2AArgs(BaseModel):
+            action: str = Field(
+                description=(
+                    "Action name from the target agent's capability, "
+                    "e.g. 'feishu.bitable.read' or 'web.search'."
+                )
+            )
+            resource: str = Field(
+                description=(
+                    "Resource identifier matching the action's capability pattern, "
+                    "e.g. 'app_token:xxx/table:yyy' or an https URL."
+                )
+            )
+            params: dict[str, Any] = Field(
+                default_factory=dict,
+                description="Optional action-specific parameters.",
+            )
+
+        return StructuredTool.from_function(
+            coroutine=_call,
+            name=f"call_{target}",
+            description=description,
+            args_schema=_A2AArgs,
+        )
     except Exception:
         _call.name = f"call_{target}"  # type: ignore[attr-defined]
         _call.description = description  # type: ignore[attr-defined]
