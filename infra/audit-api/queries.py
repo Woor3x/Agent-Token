@@ -136,6 +136,12 @@ async def get_plan(plan_id: str) -> dict:
     tasks: list[dict] = []
 
     for r in rows:
+        # Only authz_decision events represent real dispatched tasks.
+        # token_issued events also carry callee_agent/callee_action but have
+        # decision=null, causing them to appear as spurious "pending" nodes in
+        # the DAG graph. Filter them out here so each task appears exactly once.
+        if r.get("event_type") != "authz_decision":
+            continue
         summary["total"] += 1
         d = r.get("decision", "")
         if d in ("allow", "deny"):

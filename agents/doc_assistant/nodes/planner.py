@@ -317,13 +317,17 @@ async def planner_node(state: dict[str, Any]) -> dict[str, Any]:
     prompt = state.get("user_prompt", "")
     llm: LLMProvider | None = state.get("llm")
 
-    # When the user explicitly multi-selected data sources, force the rule
-    # path: it deterministically emits one fetch task per selection. The LLM
-    # path only knows about a single ``{{BITABLE_RESOURCE}}`` slot.
-    explicit_multi = len(_data_source_tasks(state, 1)) > 1
+    # When the user explicitly selected any data source(s), force the rule
+    # path: it deterministically emits exactly the right task(s) per selection.
+    # The LLM path is only used when the user gave no explicit selection, so it
+    # can freely plan web searches or other tasks.
+    # Previously this was `> 1`, which let single-selection cases fall through
+    # to the LLM, causing hallucinated tokens (e.g. app_token:default) and
+    # duplicate/spurious read_all tasks.
+    explicit_tasks = _data_source_tasks(state, 1)
 
     dag: list[dict] | None = None
-    if llm is not None and not explicit_multi:
+    if llm is not None and not explicit_tasks:
         try:
             dag = await _llm_plan(prompt, llm, state)
             validate_dag(dag)
@@ -335,6 +339,6 @@ async def planner_node(state: dict[str, Any]) -> dict[str, Any]:
     if dag is None:
         dag = _rule_plan(prompt, state)
         validate_dag(dag)
-        _log.info(f"planner=rule tasks={len(dag)}")
+        _log.info(f"planner=rule tasks={len(dag)} explicit={len(explicit_tasks)}")
 
     return {**state, "dag": dag}
