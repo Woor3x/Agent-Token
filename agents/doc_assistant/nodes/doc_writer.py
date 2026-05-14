@@ -184,8 +184,14 @@ async def doc_writer_node(state: dict[str, Any]) -> dict[str, Any]:
     base = state["feishu_base"]
     oauth: FeishuOAuth = state.get("feishu_oauth") or FeishuOAuth(base=base)
     factory = state.get("client_factory") or (lambda: httpx.AsyncClient(timeout=10.0))
-    folder_token = state.get("feishu_folder_token") or os.environ.get(
-        "FEISHU_DOCX_FOLDER_TOKEN", ""
+    # FEISHU_DOCX_FOLDER_TOKEN wins when set (explicit "drop reports here").
+    # Otherwise fall back to FEISHU_SHARED_ROOT_FOLDER — the picker root, where
+    # the user's data sources live and where the bot is already a collaborator.
+    # Same folder as the data source = no extra share / permission setup.
+    folder_token = (
+        state.get("feishu_folder_token")
+        or os.environ.get("FEISHU_DOCX_FOLDER_TOKEN", "")
+        or os.environ.get("FEISHU_SHARED_ROOT_FOLDER", "")
     )
     async with factory() as c:
         token = await oauth.get_tenant_token(client=c)
