@@ -224,7 +224,6 @@ from oidc.token import router as oidc_token_router
 from oidc.userinfo import router as userinfo_router
 from oidc.refresh import router as refresh_router
 from token_exchange.handler import router as token_exchange_router
-from plan.validate import router as plan_router
 from revoke.handler import router as revoke_router
 from agents.register import router as agents_register_router
 from agents.rotate import router as agents_rotate_router
@@ -235,7 +234,6 @@ app.include_router(oidc_token_router)
 app.include_router(userinfo_router)
 app.include_router(refresh_router)
 app.include_router(token_exchange_router)
-app.include_router(plan_router)
 app.include_router(revoke_router)
 app.include_router(agents_register_router)
 app.include_router(agents_rotate_router)

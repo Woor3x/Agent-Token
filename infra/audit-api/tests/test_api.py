@@ -186,7 +186,7 @@ class TestIngest:
         valid_types = [
             "authz_decision", "token_issued", "token_consumed",
             "revoke_issued", "anomaly", "agent_registered",
-            "key_rotated", "plan_validated",
+            "key_rotated",
         ]
         events = [_event(event_type=t) for t in valid_types]
         r = await api.post(POST_URL, headers=SVC_HDR, json={"events": events})

@@ -46,7 +46,6 @@ _VALID_EVENT_TYPES = {
     "anomaly",
     "agent_registered",
     "key_rotated",
-    "plan_validated",
 }
 
 

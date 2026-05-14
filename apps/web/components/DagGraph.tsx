@@ -126,57 +126,15 @@ function buildFromPlan(plan: PlanResult): { nodes: Node[]; edges: Edge[] } {
   const user = plan.user ?? "user";
   const taskNodeId = (i: number) => `task-${i}`;
 
-  // ── Frame: user → planner → [validate] → [tasks] → synthesizer → doc_writer
+  // ── Frame: user → planner → [tasks] → synthesizer → doc_writer
   const nodes: Node[] = [
     frameNode("user", "用户请求", user, "发起对话", "user"),
     frameNode("planner", "① 规划", orch, "LLM 生成 DAG", "doc_assistant"),
   ];
 
-  // The audit-api emits a synthetic "plan.validate" placeholder row at the
-  // head of `tasks` (task_id=null, agent=null, action=null) that carries the
-  // OPA decision for the generated plan. Surface it as a visible node so a
-  // deny on plan validation doesn't disappear from the diagram.
-  const validateRow = plan.tasks.find(
-    (t) => t.agent == null && t.action == null && t.task_id == null,
-  );
   const realTasks = plan.tasks.filter(
     (t) => t.agent != null || t.action != null,
   );
-
-  if (validateRow) {
-    const dec = validateRow.decision;
-    const col = decisionEdgeColor(dec);
-    nodes.push({
-      id: "plan-validate",
-      type: "default",
-      data: {
-        label: (
-          <div className="text-center leading-tight">
-            <div className="text-[10px] font-medium opacity-70 text-indigo-900">
-              ② OPA 校验
-            </div>
-            <div className="font-semibold text-sm text-indigo-900">
-              plan.validate
-            </div>
-            <div className="flex items-center justify-center mt-1">
-              <span className={`text-[10px] px-1.5 py-0.5 rounded ${decisionPillClass(dec)}`}>
-                {dec ?? "pending"}
-              </span>
-            </div>
-          </div>
-        ),
-      },
-      position: { x: 0, y: 0 },
-      style: {
-        border: `2px solid ${dec === "deny" ? "#ef4444" : "#6366f1"}`,
-        background: "#e0e7ff",
-        borderRadius: 10,
-        padding: "10px 14px",
-        width: 200,
-        boxShadow: dec === "deny" ? `0 0 0 3px ${col}33` : undefined,
-      },
-    });
-  }
 
   realTasks.forEach((t, i) => {
     const tint = tintFor(t.agent);
@@ -253,27 +211,13 @@ function buildFromPlan(plan: PlanResult): { nodes: Node[]; edges: Edge[] } {
 
   addEdge("e-u-p", "user", "planner", "prompt");
 
-  // Insert plan-validate between planner and tasks if present.
-  const upstreamForTasks = validateRow ? "plan-validate" : "planner";
-  if (validateRow) {
-    const vcol = decisionEdgeColor(validateRow.decision);
-    addEdge("e-p-v", "planner", "plan-validate", "validate", vcol);
-    // Deny on plan-validate halts dispatch — show that visually with a
-    // dashed "halt" edge that bypasses tasks.
-    if (validateRow.decision === "deny") {
-      addEdge("e-v-halt", "plan-validate", "synth", "halted", "#ef4444");
-    }
-  }
-
   if (realTasks.length === 0) {
-    if (!validateRow || validateRow.decision !== "deny") {
-      addEdge("e-p-s", upstreamForTasks, "synth", "(no tasks)");
-    }
+    addEdge("e-p-s", "planner", "synth", "(no tasks)");
   } else {
     realTasks.forEach((t, i) => {
       const tid = taskNodeId(i);
       const c = decisionEdgeColor(t.decision);
-      addEdge(`e-p-${i}`, upstreamForTasks, tid, "dispatch", c);
+      addEdge(`e-p-${i}`, "planner", tid, "dispatch", c);
       addEdge(`e-${i}-s`, tid, "synth", t.decision ?? undefined, c);
     });
   }
