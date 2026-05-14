@@ -2,15 +2,18 @@
 
 Three back-ends coexist, picked from ``DOC_STORAGE``:
 
-* ``local`` (default) — JSON file under :mod:`agents.doc_assistant.storage`.
-  Web UI fetches via ``GET /docs/{id}`` on doc_assistant. Default because
-  user-space Docx URLs are not readable by the front-end without OAuth user
-  scope; tenant-token-created docs return 403 from the user's browser.
+* ``feishu`` (default) — real Open Platform. The synthesizer's block list is
+  converted via :mod:`_feishu_blocks` and written to a new Docx under the
+  user-configured cloud folder (``FEISHU_DOCX_FOLDER_TOKEN``). A local cache
+  of the same blocks is *also* persisted under :mod:`agents.doc_assistant.
+  storage` keyed by the Feishu ``document_id`` so the Web UI can render an
+  in-app preview without needing user-scope OAuth, while still surfacing the
+  canonical ``https://feishu.cn/docx/{id}`` URL as a jump link.
 * ``feishu-mock`` (when ``FEISHU_BASE`` looks like a mock host) — legacy
   ``/blocks/batch_update`` shape, kept so in-process ASGI tests pass.
-* ``feishu`` (real Open Platform) — the documented
-  ``/blocks/{root_block_id}/children`` endpoint with the structured
-  ``elements`` payload (see :mod:`_feishu_blocks`).
+* ``local`` — JSON file only, no Feishu round-trip. Keyed by
+  ``doc_local_<ulid>``. Useful for unit tests and offline development; the
+  Web UI falls back to the same ``GET /docs/{id}`` preview path.
 """
 from __future__ import annotations
 
@@ -159,9 +162,10 @@ async def doc_writer_node(state: dict[str, Any]) -> dict[str, Any]:
     )
     blocks = state.get("blocks") or []
 
-    # Per-request override > env. Default branches to local storage so the
-    # front-end can render the doc without Feishu user-scope OAuth.
-    storage_mode = (state.get("doc_storage") or os.environ.get("DOC_STORAGE", "local")).lower()
+    # Per-request override > env. Default branches to Feishu cloud so the
+    # generated report lands in the user's configured Docx folder. A local
+    # cache mirrors the blocks for the front-end's in-app preview path.
+    storage_mode = (state.get("doc_storage") or os.environ.get("DOC_STORAGE", "feishu")).lower()
     if storage_mode == "local":
         record = storage.save(title=title, blocks=blocks)
         return {
@@ -193,5 +197,21 @@ async def doc_writer_node(state: dict[str, Any]) -> dict[str, Any]:
             folder_token=folder_token,
             client=c,
         )
+    # Dual-write: cache blocks locally under the Feishu doc_id so the Web UI
+    # can render an in-app preview without needing user-scope OAuth on Feishu.
+    # If the cache write fails (disk full, permission), keep the Feishu URL
+    # in the response — the user can still jump to the cloud doc directly.
+    try:
+        storage.save(
+            title=title,
+            blocks=blocks,
+            doc_id=out["document_id"],
+            url=out.get("url"),
+            storage="feishu",
+        )
+    except OSError as exc:
+        _log.warning("local preview cache write failed doc_id=%s err=%s", out["document_id"], exc)
     out["storage"] = "feishu"
+    out["title"] = title
+    out["block_count"] = len(blocks)
     return {**state, "doc": out}

@@ -51,24 +51,43 @@ def _store_dir() -> Path:
 
 
 def is_local() -> bool:
-    return os.environ.get("DOC_STORAGE", "local").lower() == "local"
+    return os.environ.get("DOC_STORAGE", "feishu").lower() == "local"
 
 
-def save(*, title: str, blocks: list[dict]) -> dict[str, Any]:
-    doc_id = f"doc_local_{new_ulid()}"
-    record = {
+def save(
+    *,
+    title: str,
+    blocks: list[dict],
+    doc_id: str | None = None,
+    url: str | None = None,
+    storage: str | None = None,
+) -> dict[str, Any]:
+    # When ``doc_id`` is given (Feishu mode dual-write), reuse the Feishu
+    # document_id as the cache key so ``/docs/{feishu_id}`` resolves to the
+    # same blocks the user just got handed back. Otherwise mint a local ulid.
+    if not doc_id:
+        doc_id = f"doc_local_{new_ulid()}"
+    record: dict[str, Any] = {
         "document_id": doc_id,
         "title": title,
         "created_at": int(time.time()),
         "blocks": blocks or [],
     }
+    # Persist the canonical jump URL + backend label so ``GET /docs/{id}``
+    # can hand the front-end everything it needs to render a preview + a
+    # "open in Feishu" button in one round trip.
+    if url:
+        record["url"] = url
+    if storage:
+        record["storage"] = storage
     path = _store_dir() / f"{doc_id}.json"
     path.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
     return record
 
 
 def get(doc_id: str) -> dict[str, Any] | None:
-    # Reject path traversal: doc_id is `doc_local_<ulid>` shaped.
+    # Reject path traversal: doc_id is `doc_local_<ulid>` or a Feishu doc_id
+    # (alnum / underscore). Reject slashes and dot-dot regardless of source.
     if "/" in doc_id or ".." in doc_id:
         return None
     path = _store_dir() / f"{doc_id}.json"
@@ -82,7 +101,10 @@ def get(doc_id: str) -> dict[str, Any] | None:
 
 def list_recent(limit: int = 50) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
-    for p in _store_dir().glob("doc_local_*.json"):
+    # Match both local-only docs (``doc_local_<ulid>.json``) and Feishu
+    # dual-write caches (``<feishu_doc_id>.json``). The reserved ``revoked``
+    # marker file (if any) is filtered by trailing-dot/underscore checks.
+    for p in _store_dir().glob("*.json"):
         try:
             doc = json.loads(p.read_text(encoding="utf-8"))
             out.append(

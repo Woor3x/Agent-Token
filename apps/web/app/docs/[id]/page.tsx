@@ -74,12 +74,28 @@ export default function DocPage({ params }: { params: Promise<{ id: string }> })
       .catch(e => setError(String(e)));
   }, [id]);
 
+  // Only treat external https URLs as jump targets — internal "/docs/..."
+  // paths would just bounce back to this same page.
+  const feishuUrl =
+    doc?.url && /^https?:\/\//i.test(doc.url) ? doc.url : null;
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <a href="/chat" className="text-slate-400 hover:text-slate-600 text-sm">← 返回聊天</a>
         <div className="flex items-center gap-2 ml-auto">
+          {feishuUrl && (
+            <a
+              href={feishuUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs inline-flex items-center gap-1 bg-indigo-600 text-white hover:bg-indigo-700 px-3 py-1 rounded-md font-medium"
+              title="在飞书云文档中打开"
+            >
+              打开飞书文档 <span aria-hidden>↗</span>
+            </a>
+          )}
           <span className="text-xs font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded">{id}</span>
         </div>
       </div>
@@ -98,13 +114,32 @@ export default function DocPage({ params }: { params: Promise<{ id: string }> })
       )}
 
       {doc && (
-        <article className="bg-white border border-slate-200 rounded-2xl px-8 py-6 shadow-sm">
-          {doc.blocks.length === 0 ? (
-            <p className="text-slate-400 text-sm text-center py-8">文档内容为空</p>
-          ) : (
-            <Markdown>{blocksToMarkdown(doc.blocks)}</Markdown>
+        <>
+          {feishuUrl && (
+            // The in-app preview renders the Markdown-ish blocks the
+            // synthesizer emitted; Feishu Docx uses a richer block tree
+            // (callouts, embeds, comments, ...) so the cloud view may
+            // differ visually from this preview. Tell the user so a
+            // "why doesn't it look the same" question doesn't surface.
+            <div className="mb-3 text-xs text-slate-500 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              本地预览基于 Markdown 渲染 · 飞书云文档为富文档块结构，最终版式以
+              <a
+                href={feishuUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-indigo-600 hover:underline mx-1"
+              >飞书原文</a>
+              为准。
+            </div>
           )}
-        </article>
+          <article className="bg-white border border-slate-200 rounded-2xl px-8 py-6 shadow-sm">
+            {doc.blocks.length === 0 ? (
+              <p className="text-slate-400 text-sm text-center py-8">文档内容为空</p>
+            ) : (
+              <Markdown>{blocksToMarkdown(doc.blocks)}</Markdown>
+            )}
+          </article>
+        </>
       )}
     </div>
   );

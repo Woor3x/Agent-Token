@@ -77,10 +77,11 @@ export async function sendChat(
 }
 
 // ── Generated docs ────────────────────────────────────────────────────────────
-// doc_assistant persists synthesized reports locally under DOC_STORAGE=local
-// (the default) and serves them via GET /docs/{id}. Feishu Docx URLs are no
-// longer used for the UI's render path because tenant-token-created docs
-// can't be fetched by the user's browser without OAuth user scope.
+// doc_assistant writes synthesized reports to Feishu cloud (DOC_STORAGE=feishu,
+// the default) and also caches the block list locally keyed by the Feishu
+// document_id so the Web UI can render an in-app preview without needing
+// user-scope OAuth on Feishu. ``url`` carries the canonical Feishu cloud link
+// (https://feishu.cn/docx/<id>) that the doc page surfaces as a jump button.
 
 export interface FeishuBlock {
   block_type: string;
@@ -92,22 +93,24 @@ export interface FeishuDoc {
   title: string;
   created_at: number;
   blocks: FeishuBlock[];
-}
-
-function isLocalDocId(id: string): boolean {
-  return id.startsWith("doc_local_");
+  // Optional metadata propagated from the doc_writer node. ``url`` is the
+  // Feishu cloud URL when storage="feishu"; absent / internal when "local".
+  url?: string;
+  storage?: "feishu" | "local";
 }
 
 export async function getFeishuDoc(docId: string): Promise<FeishuDoc> {
-  if (isLocalDocId(docId)) {
-    const resp = await fetch(`${DOC_ASSISTANT}/docs/${docId}`);
-    if (!resp.ok) throw new Error(`doc not found: ${resp.status}`);
-    return resp.json();
-  }
-  // Fallback: legacy Feishu mock path (kept so older trace links still resolve).
-  const resp = await fetch(`${FEISHU}/open-apis/docx/v1/documents/${docId}`);
-  if (!resp.ok) throw new Error(`doc not found: ${resp.status}`);
-  const body = await resp.json();
+  // Both feishu and local modes cache blocks under doc_assistant's storage,
+  // keyed by ``document_id`` (Feishu id or ``doc_local_<ulid>``). Try that
+  // path first; fall through to the legacy Feishu mock endpoint only when
+  // the cache miss is genuine (e.g. an older trace link from before
+  // dual-write was wired up).
+  const resp = await fetch(`${DOC_ASSISTANT}/docs/${docId}`);
+  if (resp.ok) return resp.json();
+  if (resp.status !== 404) throw new Error(`doc not found: ${resp.status}`);
+  const legacy = await fetch(`${FEISHU}/open-apis/docx/v1/documents/${docId}`);
+  if (!legacy.ok) throw new Error(`doc not found: ${legacy.status}`);
+  const body = await legacy.json();
   return { ...body.data.document, blocks: body.data.blocks };
 }
 

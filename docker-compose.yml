@@ -24,9 +24,9 @@ x-agent-env: &agent-env
   FEISHU_BASE: ${FEISHU_BASE:-https://open.feishu.cn}
   FEISHU_APP_ID: ${FEISHU_APP_ID:-}
   FEISHU_APP_SECRET: ${FEISHU_APP_SECRET:-}
-  # FEISHU_DOCX_FOLDER_TOKEN: only read when DOC_STORAGE=feishu (writes
-  # docs into a shared folder so tenant token avoids 403 on bot's private
-  # root). Default DOC_STORAGE=local doesn't touch it.
+  # FEISHU_DOCX_FOLDER_TOKEN: target folder for doc_writer (DOC_STORAGE=feishu,
+  # the default). Empty → bot's private root, which tenant tokens can't write
+  # to; set this to a folder the bot was added to as collaborator.
   FEISHU_DOCX_FOLDER_TOKEN: ${FEISHU_DOCX_FOLDER_TOKEN:-}
   # Shared folder bot was added as collaborator on. Picker uses it as default
   # root because /drive/v1/files (tenant token) only lists bot's own drive.
@@ -49,10 +49,12 @@ x-agent-env: &agent-env
   WEB_FETCH_DOMAIN_OPEN: ${WEB_FETCH_DOMAIN_OPEN:-false}
   WEB_AUTO_FETCH_TOP_K: ${WEB_AUTO_FETCH_TOP_K:-2}
   DOC_ASCII_FLOW: ${DOC_ASCII_FLOW:-auto}
-  # local | feishu — local persists reports to a JSON store in the
-  # doc_assistant container so the web UI can render them without needing
-  # OAuth user-scope on Feishu drive.
-  DOC_STORAGE: ${DOC_STORAGE:-local}
+  # feishu | local — feishu (default) writes the report into the user's
+  # configured Docx folder and also caches the block list under
+  # /app/data/docs keyed by the Feishu document_id so the Web UI can render
+  # an in-app preview alongside the cloud jump link. ``local`` skips the
+  # Feishu round-trip — useful for offline / unit tests.
+  DOC_STORAGE: ${DOC_STORAGE:-feishu}
   DOC_STORAGE_DIR: /app/data/docs
 
 services:
