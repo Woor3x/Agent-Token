@@ -9,6 +9,10 @@ permissions:
     resource_pattern: "agent:web_agent"
   - action: feishu.bitable.read
     resource_pattern: "app_token:*/table:*"
+  - action: feishu.bitable.read_all
+    resource_pattern: "app_token:*"
+  - action: feishu.docx.read
+    resource_pattern: "document_id:*"
   - action: feishu.doc.write
     resource_pattern: "doc_token:*"
   - action: web.search
